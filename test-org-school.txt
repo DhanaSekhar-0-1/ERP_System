@@ -1,0 +1,15 @@
+Organization: f2f93e9e-f8c3-4ba9-83e5-a83578a7bf59
+School:       48b3feb5-553e-4c0a-941b-c351fb8fd111
+
+Admin:
+Email: test.admin@erp.local
+Password: Test@EbnwKmVY2KR61
+
+Teacher:
+Email: test.teacher@erp.local
+Password: Test@HeuEU0Ladxt91
+
+Student:
+Email: test.student@erp.local
+Student ID: 93ccfec4-1baf-445f-a83e-11f5ebdbfe62
+Password: Test@s3mkvmyT0Skw1

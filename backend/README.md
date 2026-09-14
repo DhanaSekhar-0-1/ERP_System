@@ -150,6 +150,78 @@ The same login endpoint accepts a normal email address or a generated staff
 profile ID for teacher accounts.
 The server-only service-role key is used only for managed account creation.
 
+## Organizations, schools, and settings API
+
+Phase 1 organization and school administration is available through:
+
+```http
+GET    /api/v1/organizations
+POST   /api/v1/organizations
+GET    /api/v1/organizations/:organizationId
+PATCH  /api/v1/organizations/:organizationId
+GET    /api/v1/organizations/:organizationId/schools
+POST   /api/v1/organizations/:organizationId/schools
+GET    /api/v1/schools/:schoolId
+PATCH  /api/v1/schools/:schoolId
+GET    /api/v1/schools/:schoolId/settings
+PATCH  /api/v1/schools/:schoolId/settings
+POST   /api/v1/schools/:schoolId/archive
+POST   /api/v1/schools/:schoolId/restore
+```
+
+Organization routes require `organizations:read` or
+`organizations:manage`; school routes require `schools:read` or
+`schools:manage`. Super Admins can manage all organizations and schools.
+Assigned users can read only their own school, and School Admins can manage
+only their assigned school. Organization slugs are unique, school codes are
+unique within an organization, and archive/restore operations enforce valid
+state transitions. School settings are one-to-one with a school and support
+address, phone, email, timezone, metadata, and timestamps.
+
+## Users, roles, and permissions API
+
+User administration is scoped to the administrator's organization. Super
+Admins can administer all schools in their organization; School Admins can
+administer only users assigned to their school. The routes require the
+permission shown below:
+
+```http
+GET    /api/v1/users                         users:read
+POST   /api/v1/users                         users:manage
+GET    /api/v1/users/:userId                 users:read
+PATCH  /api/v1/users/:userId                 users:manage
+POST   /api/v1/users/:userId/activate       users:manage
+POST   /api/v1/users/:userId/deactivate     users:manage
+POST   /api/v1/users/:userId/invite         users:manage
+POST   /api/v1/users/:userId/resend-invite  users:manage
+GET    /api/v1/users/:userId/roles           roles:read
+POST   /api/v1/users/:userId/roles           roles:manage
+DELETE /api/v1/users/:userId/roles/:roleId   roles:manage
+
+GET    /api/v1/roles                         roles:read
+POST   /api/v1/roles                         roles:manage
+GET    /api/v1/roles/:roleId                 roles:read
+PATCH  /api/v1/roles/:roleId                 roles:manage
+GET    /api/v1/permissions                   permissions:read
+GET    /api/v1/roles/:roleId/permissions     permissions:read
+PUT    /api/v1/roles/:roleId/permissions     roles:manage
+```
+
+Managed users without a supplied `authUserId` are created through the
+server-only Supabase Admin API. Supplying a password creates a confirmed
+managed account; omitting it sends an invitation. Passwords are never stored
+in PostgreSQL. Deactivation and removal of a School Admin role cannot remove
+the last active School Admin for a school, and an administrator cannot
+deactivate their own account. Role catalog and permission changes are limited
+to Super Admin because roles and permissions are global catalog records.
+
+Session listing and revocation endpoints from the product API specification
+are intentionally not exposed yet. The current Supabase integration supports
+token validation and account-level managed-user operations, but does not have
+a repository-approved session-revocation boundary. Do not implement session
+administration by querying or mutating Supabase Auth tables directly; add a
+reviewed Supabase Admin session API before exposing those routes.
+
 ## Bootstrap the first administrator
 
 After creating a user in Supabase Auth, copy that user's UUID from
@@ -275,3 +347,109 @@ employee number and NFC identifier for the school. Create the Supabase Auth
 user first; this API does not create passwords or bypass Supabase Auth.
 Administrators can replace a lost teacher NFC card through the PATCH endpoint
 without changing the teacher's login credentials.
+
+## Enrollments API
+
+```http
+POST  /api/v1/enrollments
+GET   /api/v1/enrollments?academicYearId=<uuid>&classId=<uuid>
+GET   /api/v1/enrollments/:enrollmentId
+PATCH /api/v1/enrollments/:enrollmentId
+```
+
+Enrollment creation validates that the student, academic year, class, and
+section belong to the same school and that the section belongs to the selected
+class and academic year. A student can have only one enrollment per academic
+year. School Admin has read/manage access; Principal and Teacher have read
+access. Enrollment status supports `ACTIVE`, `PROMOTED`, `TRANSFERRED`, and
+`WITHDRAWN`.
+
+## Attendance API
+
+```http
+POST  /api/v1/attendance
+GET   /api/v1/attendance?attendanceDate=2026-09-14
+GET   /api/v1/attendance?enrollmentId=<uuid>
+GET   /api/v1/attendance/:attendanceId
+PATCH /api/v1/attendance/:attendanceId
+```
+
+Attendance belongs to an enrollment and is school-scoped. Only one record is
+allowed for a student enrollment on a date. Statuses are `PRESENT`, `ABSENT`,
+`LATE`, and `EXCUSED`. School Admin and Teacher can manage attendance;
+Principal can read it.
+
+## Homework API
+
+```http
+GET    /api/v1/homework
+POST   /api/v1/homework
+GET    /api/v1/homework/:homeworkId
+PATCH  /api/v1/homework/:homeworkId
+DELETE /api/v1/homework/:homeworkId
+POST   /api/v1/homework/:homeworkId/publish
+GET    /api/v1/students/:studentId/homework
+POST   /api/v1/homework/:homeworkId/submit
+```
+
+Homework is scoped to a school, academic year, class, section, subject, and
+assigned teacher. The service validates that the teacher has a matching staff
+assignment before allowing creation or changes. School Admin and Principal can
+manage homework; Teachers can manage their own assigned homework. Published
+homework is visible to enrolled students and linked parents, and students can
+submit text or an attachment.
+
+## Announcements API
+
+```http
+GET    /api/v1/announcements
+POST   /api/v1/announcements
+GET    /api/v1/announcements/:announcementId
+PATCH  /api/v1/announcements/:announcementId
+DELETE /api/v1/announcements/:announcementId
+POST   /api/v1/announcements/:announcementId/publish
+POST   /api/v1/announcements/:announcementId/archive
+```
+
+Announcements are school-scoped and support class, section, role, and
+arbitrary JSON target metadata. School Admin and Principal can manage them;
+Teachers, Students, and Parents can read announcements for their school.
+
+## Subjects API
+
+```http
+POST  /api/v1/subjects
+GET   /api/v1/subjects?academicYearId=<uuid>
+GET   /api/v1/subjects/:subjectId
+PATCH /api/v1/subjects/:subjectId
+```
+
+Subjects are scoped to the authenticated user's school and academic year.
+Reads require `subjects:read`; create and update require `subjects:manage`.
+Subject codes are normalized to uppercase and must be unique within a school
+and academic year.
+
+## Test accounts
+
+The seeded roles are not test users by themselves. To create a dedicated
+Supabase/ERP test organization, school, and three linked accounts, run:
+
+```powershell
+npm run prisma:bootstrap-test-accounts -- `
+  --admin-password=YOUR_ADMIN_TEST_PASSWORD `
+  --teacher-password=YOUR_TEACHER_TEST_PASSWORD `
+  --student-password=YOUR_STUDENT_TEST_PASSWORD
+```
+
+The script is idempotent for the default test emails and creates:
+
+```text
+test.admin@erp.local    -> School Admin
+test.teacher@erp.local  -> Teacher
+test.student@erp.local  -> Student
+```
+
+It also creates a test student profile with a generated student ID and
+`TEST-NFC-STUDENT-001`, plus a teacher profile with
+`TEST-NFC-TEACHER-001`. Passwords come from command-line options or are
+generated for one-time display; never commit them to source control.

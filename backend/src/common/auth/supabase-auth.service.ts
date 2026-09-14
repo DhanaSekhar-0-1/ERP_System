@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   OnModuleInit,
@@ -122,6 +123,44 @@ export class SupabaseAuthService implements OnModuleInit {
     });
     if (error || !data.user) {
       throw new UnauthorizedException(error?.message ?? 'Unable to create login account');
+    }
+    return data.user;
+  }
+
+  async inviteManagedUser(input: {
+    email: string;
+    displayName: string;
+  }) {
+    const { data, error } = await this.adminClient.auth.admin.inviteUserByEmail(
+      input.email,
+      { data: { full_name: input.displayName } },
+    );
+    if (error || !data.user) {
+      throw new BadRequestException(
+        error?.message ?? 'Unable to send the invitation',
+      );
+    }
+    return data.user;
+  }
+
+  async updateManagedUser(
+    authUserId: string,
+    input: { email?: string; displayName?: string },
+  ) {
+    const { data, error } = await this.adminClient.auth.admin.updateUserById(
+      authUserId,
+      {
+        email: input.email,
+        user_metadata:
+          input.displayName === undefined
+            ? undefined
+            : { full_name: input.displayName },
+      },
+    );
+    if (error || !data.user) {
+      throw new BadRequestException(
+        error?.message ?? 'Unable to update the login account',
+      );
     }
     return data.user;
   }
