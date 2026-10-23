@@ -91,6 +91,25 @@ export class SectionsService {
     }
   }
 
+  async archive(authUser: SupabaseUser, sectionId: string) {
+    const existing = await this.findOne(authUser, sectionId);
+    if (existing.isArchived) {
+      throw new ConflictException('Section is already archived');
+    }
+    const active = await this.database.enrollment.count({
+      where: { sectionId, status: 'ACTIVE' },
+    });
+    if (active > 0) {
+      throw new ConflictException(
+        `Section has ${active} active enrollments; transfer them before archiving`,
+      );
+    }
+    return this.database.section.update({
+      where: { id: sectionId },
+      data: { isArchived: true },
+    });
+  }
+
   private async getSchoolId(authUser: SupabaseUser): Promise<string> {
     const user = await this.database.user.findUnique({
       where: { authUserId: authUser.id },

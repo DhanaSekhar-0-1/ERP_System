@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AuthModule } from './common/auth/auth.module';
+import { CommonModule } from './common/common.module';
 import { DatabaseModule } from './common/database/database.module';
 import { StudentsModule } from './modules/students/students.module';
 import { GuardiansModule } from './modules/guardians/guardians.module';
@@ -20,6 +21,21 @@ import { SchoolsModule } from './modules/schools/schools.module';
 import { UsersModule } from './modules/users/users.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { ExaminationsModule } from './modules/examinations/examinations.module';
+import { FeesModule } from './modules/fees/fees.module';
+import { LeavesModule } from './modules/leaves/leaves.module';
+import { TimetablesModule } from './modules/timetables/timetables.module';
+import { ComplaintsModule } from './modules/complaints/complaints.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { FilesModule } from './modules/files/files.module';
+import { CertificatesModule } from './modules/certificates/certificates.module';
+import { DashboardsModule } from './modules/dashboards/dashboards.module';
+import { TransportModule } from './modules/transport/transport.module';
+import { LibraryModule } from './modules/library/library.module';
+import { AssetsModule } from './modules/assets/assets.module';
+import { SyncModule } from './modules/sync/sync.module';
 
 @Module({
   imports: [
@@ -27,8 +43,9 @@ import { PermissionsModule } from './modules/permissions/permissions.module';
       isGlobal: true,
       cache: true,
     }),
-    AuthModule,
     DatabaseModule,
+    CommonModule,
+    AuthModule,
     StudentsModule,
     GuardiansModule,
     AcademicYearsModule,
@@ -46,6 +63,21 @@ import { PermissionsModule } from './modules/permissions/permissions.module';
     UsersModule,
     RolesModule,
     PermissionsModule,
+    ApprovalsModule,
+    AuditModule,
+    ExaminationsModule,
+    FeesModule,
+    LeavesModule,
+    TimetablesModule,
+    ComplaintsModule,
+    NotificationsModule,
+    FilesModule,
+    CertificatesModule,
+    DashboardsModule,
+    TransportModule,
+    LibraryModule,
+    AssetsModule,
+    SyncModule,
   ],
   controllers: [AppController],
 })

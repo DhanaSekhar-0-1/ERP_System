@@ -22,6 +22,7 @@ export class OrganizationsService {
     const actor = await this.getActor(authUser);
     this.assertPermissionScope(actor, false);
     return this.database.organization.findMany({
+      where: { id: actor.organizationId ?? undefined },
       orderBy: { name: 'asc' },
       include: { _count: { select: { schools: true } } },
     });
@@ -62,6 +63,7 @@ export class OrganizationsService {
   ) {
     const actor = await this.getActor(authUser);
     this.assertPermissionScope(actor, true);
+    this.assertOrganizationReadScope(actor, organizationId);
     await this.findOrganization(organizationId);
     try {
       return await this.database.organization.update({
@@ -150,8 +152,8 @@ export class OrganizationsService {
     organizationId: string,
   ) {
     if (
-      !this.isSuperAdmin(actor) &&
-      (!actor.schoolId || actor.organizationId !== organizationId)
+      actor.organizationId !== organizationId ||
+      (!this.isSuperAdmin(actor) && !actor.schoolId)
     ) {
       throw new ForbiddenException('Organization access is not permitted');
     }

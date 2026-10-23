@@ -29,7 +29,7 @@ export class SectionsController {
   @RequirePermissions('sections:read')
   findMany(
     @CurrentUser() user: SupabaseUser,
-    @Query('classId') classId?: string,
+    @Query('classId', new ParseUUIDPipe({ optional: true })) classId?: string,
   ) {
     return this.sections.findMany(user, classId);
   }
@@ -51,5 +51,14 @@ export class SectionsController {
     @Body() input: UpdateSectionDto,
   ) {
     return this.sections.update(user, sectionId, input);
+  }
+
+  @Post(':sectionId/archive')
+  @RequirePermissions('sections:manage')
+  archive(
+    @CurrentUser() user: SupabaseUser,
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+  ) {
+    return this.sections.archive(user, sectionId);
   }
 }

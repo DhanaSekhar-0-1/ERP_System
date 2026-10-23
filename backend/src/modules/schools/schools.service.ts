@@ -19,8 +19,8 @@ export class SchoolsService {
     const actor = await this.getActor(authUser);
     await this.findOrganization(organizationId);
     if (
-      !this.isSuperAdmin(actor) &&
-      (!actor.schoolId || actor.organizationId !== organizationId)
+      actor.organizationId !== organizationId ||
+      (!this.isSuperAdmin(actor) && !actor.schoolId)
     ) {
       throw new ForbiddenException('Organization school access is not permitted');
     }
@@ -41,6 +41,9 @@ export class SchoolsService {
   ) {
     const actor = await this.getActor(authUser);
     this.assertSuperAdmin(actor);
+    if (actor.organizationId !== organizationId) {
+      throw new ForbiddenException('Schools can be created only in your organization');
+    }
     await this.findOrganization(organizationId);
     try {
       return await this.database.school.create({
@@ -67,7 +70,7 @@ export class SchoolsService {
     if (!school) {
       throw new NotFoundException('School not found');
     }
-    this.assertRead(actor, school.id);
+    this.assertRead(actor, school);
     return school;
   }
 
@@ -192,10 +195,13 @@ export class SchoolsService {
   }
 
   private assertRead(
-    actor: { schoolId: string | null; roles: { role: { name: string } }[] },
-    schoolId: string,
+    actor: { organizationId: string | null; schoolId: string | null; roles: { role: { name: string } }[] },
+    school: { id: string; organizationId: string },
   ) {
-    if (!this.isSuperAdmin(actor) && actor.schoolId !== schoolId) {
+    const permitted = this.isSuperAdmin(actor)
+      ? actor.organizationId === school.organizationId
+      : actor.schoolId === school.id;
+    if (!permitted) {
       throw new ForbiddenException('School access is not permitted');
     }
   }

@@ -29,7 +29,7 @@ export class SubjectsController {
   @RequirePermissions('subjects:read')
   findMany(
     @CurrentUser() user: SupabaseUser,
-    @Query('academicYearId') academicYearId?: string,
+    @Query('academicYearId', new ParseUUIDPipe({ optional: true })) academicYearId?: string,
   ) {
     return this.subjects.findMany(user, academicYearId);
   }

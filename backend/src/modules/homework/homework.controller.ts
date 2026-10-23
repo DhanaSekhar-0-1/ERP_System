@@ -15,6 +15,11 @@ import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import { CreateHomeworkDto } from './dto/create-homework.dto';
 import { SubmitHomeworkDto } from './dto/submit-homework.dto';
 import { UpdateHomeworkDto } from './dto/update-homework.dto';
+import {
+  GradeSubmissionDto,
+  HomeworkQueryDto,
+  ReturnSubmissionDto,
+} from './dto/grade-submission.dto';
 import { HomeworkService } from './homework.service';
 
 @Controller('homework')
@@ -23,21 +28,8 @@ export class HomeworkController {
 
   @Get()
   @RequirePermissions('homework:read')
-  findMany(
-    @CurrentUser() user: SupabaseUser,
-    @Query('academicYearId') academicYearId?: string,
-    @Query('classId') classId?: string,
-    @Query('sectionId') sectionId?: string,
-    @Query('subjectId') subjectId?: string,
-    @Query('teacherId') teacherId?: string,
-  ) {
-    return this.homework.findMany(user, {
-      academicYearId,
-      classId,
-      sectionId,
-      subjectId,
-      teacherId,
-    });
+  findMany(@CurrentUser() user: SupabaseUser, @Query() query: HomeworkQueryDto) {
+    return this.homework.findMany(user, query);
   }
 
   @Post()
@@ -83,6 +75,15 @@ export class HomeworkController {
     return this.homework.publish(user, homeworkId);
   }
 
+  @Post(':homeworkId/archive')
+  @RequirePermissions('homework:manage')
+  archive(
+    @CurrentUser() user: SupabaseUser,
+    @Param('homeworkId', ParseUUIDPipe) homeworkId: string,
+  ) {
+    return this.homework.archive(user, homeworkId);
+  }
+
   @Post(':homeworkId/submit')
   @RequirePermissions('homework:read')
   submit(
@@ -91,6 +92,37 @@ export class HomeworkController {
     @Body() input: SubmitHomeworkDto,
   ) {
     return this.homework.submit(user, homeworkId, input);
+  }
+
+  @Get(':homeworkId/submissions')
+  @RequirePermissions('homework:manage')
+  submissions(
+    @CurrentUser() user: SupabaseUser,
+    @Param('homeworkId', ParseUUIDPipe) homeworkId: string,
+  ) {
+    return this.homework.submissions(user, homeworkId);
+  }
+
+  @Post(':homeworkId/submissions/:submissionId/grade')
+  @RequirePermissions('homework:manage')
+  grade(
+    @CurrentUser() user: SupabaseUser,
+    @Param('homeworkId', ParseUUIDPipe) homeworkId: string,
+    @Param('submissionId', ParseUUIDPipe) submissionId: string,
+    @Body() input: GradeSubmissionDto,
+  ) {
+    return this.homework.grade(user, homeworkId, submissionId, input);
+  }
+
+  @Post(':homeworkId/submissions/:submissionId/return')
+  @RequirePermissions('homework:manage')
+  returnSubmission(
+    @CurrentUser() user: SupabaseUser,
+    @Param('homeworkId', ParseUUIDPipe) homeworkId: string,
+    @Param('submissionId', ParseUUIDPipe) submissionId: string,
+    @Body() input: ReturnSubmissionDto,
+  ) {
+    return this.homework.returnSubmission(user, homeworkId, submissionId, input);
   }
 }
 

@@ -12,6 +12,7 @@ import { RequirePermissions } from '../../common/auth/permissions.decorator';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
 import { UpdateAcademicYearDto } from './dto/update-academic-year.dto';
+import { RolloverAcademicYearDto } from './dto/rollover-academic-year.dto';
 import { AcademicYearsService } from './academic-years.service';
 
 @Controller('academic-years')
@@ -56,5 +57,33 @@ export class AcademicYearsController {
     @Param('academicYearId', ParseUUIDPipe) academicYearId: string,
   ) {
     return this.academicYears.activate(user, academicYearId);
+  }
+
+  @Post(':academicYearId/close')
+  @RequirePermissions('academic-years:manage')
+  close(
+    @CurrentUser() user: SupabaseUser,
+    @Param('academicYearId', ParseUUIDPipe) academicYearId: string,
+  ) {
+    return this.academicYears.close(user, academicYearId);
+  }
+
+  @Post(':academicYearId/rollover')
+  @RequirePermissions('academic-years:manage')
+  rollover(
+    @CurrentUser() user: SupabaseUser,
+    @Param('academicYearId', ParseUUIDPipe) academicYearId: string,
+    @Body() input: RolloverAcademicYearDto,
+  ) {
+    return this.academicYears.rollover(user, academicYearId, input);
+  }
+
+  @Get(':academicYearId/summary')
+  @RequirePermissions('academic-years:read')
+  summary(
+    @CurrentUser() user: SupabaseUser,
+    @Param('academicYearId', ParseUUIDPipe) academicYearId: string,
+  ) {
+    return this.academicYears.summary(user, academicYearId);
   }
 }

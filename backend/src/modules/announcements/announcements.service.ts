@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -8,10 +9,17 @@ import { DatabaseService } from '../../common/database/database.service';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { UpdateAnnouncementDto } from './dto/update-announcement.dto';
+import { AccessService, SchoolContext } from '../../common/access/access.service';
+import { NotifyService } from '../../common/notify/notify.service';
+import { ROLE } from '../../common/access/roles';
 
 @Injectable()
 export class AnnouncementsService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly access: AccessService,
+    private readonly notify: NotifyService,
+  ) {}
 
   async create(authUser: SupabaseUser, input: CreateAnnouncementDto) {
     const context = await this.getContext(authUser);
@@ -19,7 +27,7 @@ export class AnnouncementsService {
     return this.database.announcement.create({
       data: {
         schoolId: context.schoolId,
-        createdById: context.id,
+        createdById: context.userId,
         title: input.title.trim(),
         content: input.content.trim(),
         targetClassId: input.targetClassId,
@@ -35,24 +43,105 @@ export class AnnouncementsService {
     const context = await this.getContext(authUser);
     return this.database.announcement.findMany({
       where: {
-        schoolId: context.schoolId,
-        ...(status && Object.values(AnnouncementStatus).includes(status as AnnouncementStatus)
-          ? { status: status as AnnouncementStatus }
-          : {}),
+        AND: [
+          await this.audienceWhere(context),
+          status && Object.values(AnnouncementStatus).includes(status as AnnouncementStatus)
+            ? { status: status as AnnouncementStatus }
+            : {},
+        ],
       },
       orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
       include: this.includeRelations(),
+      take: 200,
     });
   }
 
   async findOne(authUser: SupabaseUser, announcementId: string) {
     const context = await this.getContext(authUser);
     const announcement = await this.database.announcement.findFirst({
-      where: { id: announcementId, schoolId: context.schoolId },
+      where: { AND: [{ id: announcementId }, await this.audienceWhere(context)] },
       include: this.includeRelations(),
     });
     if (!announcement) throw new NotFoundException('Announcement not found');
     return announcement;
+  }
+
+  /**
+   * Managers see every announcement. Everyone else sees published ones that are untargeted
+   * or aimed at their role, class, or section (a parent through their children).
+   */
+  private async audienceWhere(context: SchoolContext): Promise<Prisma.AnnouncementWhereInput> {
+    if (this.access.hasPermission(context, 'announcements:manage')) {
+      return { schoolId: context.schoolId };
+    }
+    const classIds = new Set<string>();
+    const sectionIds = new Set<string>();
+    if (context.isTeacher) {
+      const coverage = await this.access.teacherCoverage(context);
+      coverage.classIds.forEach((id) => classIds.add(id));
+      coverage.sectionIds.forEach((id) => sectionIds.add(id));
+      const sections = await this.database.section.findMany({
+        where: { id: { in: coverage.sectionIds } },
+        select: { classId: true },
+      });
+      sections.forEach((section) => classIds.add(section.classId));
+    }
+    const scope = await this.access.studentScope(context);
+    if (!scope.all && (context.isStudent || context.isParent)) {
+      const enrollments = await this.database.enrollment.findMany({
+        where: { studentId: { in: scope.ids }, status: 'ACTIVE' },
+        select: { classId: true, sectionId: true },
+      });
+      enrollments.forEach((enrollment) => {
+        classIds.add(enrollment.classId);
+        sectionIds.add(enrollment.sectionId);
+      });
+    }
+    return {
+      schoolId: context.schoolId,
+      status: AnnouncementStatus.PUBLISHED,
+      AND: [
+        { OR: [{ targetRole: null }, { targetRole: { in: context.roles } }] },
+        { OR: [{ targetClassId: null }, { targetClassId: { in: [...classIds] } }] },
+        { OR: [{ targetSectionId: null }, { targetSectionId: { in: [...sectionIds] } }] },
+      ],
+    };
+  }
+
+  private async notifyAudience(announcement: {
+    id: string;
+    schoolId: string;
+    title: string;
+    targetRole: string | null;
+    targetClassId: string | null;
+    targetSectionId: string | null;
+  }) {
+    const input = {
+      type: 'announcement.published',
+      title: announcement.title,
+      body: 'A new announcement was published.',
+      schoolId: announcement.schoolId,
+      data: { announcementId: announcement.id },
+    };
+    if (announcement.targetClassId || announcement.targetSectionId) {
+      const enrollments = await this.database.enrollment.findMany({
+        where: {
+          schoolId: announcement.schoolId,
+          status: 'ACTIVE',
+          ...(announcement.targetClassId ? { classId: announcement.targetClassId } : {}),
+          ...(announcement.targetSectionId ? { sectionId: announcement.targetSectionId } : {}),
+        },
+        select: { studentId: true },
+      });
+      for (const { studentId } of enrollments) {
+        await this.notify.toStudentFamily(studentId, input);
+      }
+      return;
+    }
+    const roles = announcement.targetRole
+      ? [announcement.targetRole]
+      : [ROLE.TEACHER, ROLE.STUDENT, ROLE.PARENT, ROLE.PRINCIPAL, ROLE.ACCOUNTANT];
+    await this.notify.toRoles(announcement.schoolId, roles, input);
   }
 
   async update(
@@ -92,11 +181,16 @@ export class AnnouncementsService {
 
   async publish(authUser: SupabaseUser, announcementId: string) {
     const existing = await this.findOne(authUser, announcementId);
-    return this.database.announcement.update({
+    if (existing.status === AnnouncementStatus.PUBLISHED) {
+      throw new ConflictException('Announcement is already published');
+    }
+    const published = await this.database.announcement.update({
       where: { id: existing.id },
-      data: { status: AnnouncementStatus.PUBLISHED, publishedAt: new Date() },
+      data: { status: AnnouncementStatus.PUBLISHED, publishedAt: new Date(), archivedAt: null },
       include: this.includeRelations(),
     });
+    await this.notifyAudience(published);
+    return published;
   }
 
   async archive(authUser: SupabaseUser, announcementId: string) {
@@ -131,15 +225,8 @@ export class AnnouncementsService {
     }
   }
 
-  private async getContext(authUser: SupabaseUser) {
-    const user = await this.database.user.findUnique({
-      where: { authUserId: authUser.id },
-      select: { id: true, schoolId: true, status: true },
-    });
-    if (!user) throw new ForbiddenException('ERP user profile is required');
-    if (user.status !== 'ACTIVE') throw new ForbiddenException('ERP user is not active');
-    if (!user.schoolId) throw new ForbiddenException('ERP user is not assigned to a school');
-    return { ...user, schoolId: user.schoolId };
+  private getContext(authUser: SupabaseUser): Promise<SchoolContext> {
+    return this.access.schoolContext(authUser);
   }
 
   private includeRelations() {

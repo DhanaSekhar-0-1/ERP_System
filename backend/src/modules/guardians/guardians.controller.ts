@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -11,10 +12,15 @@ import {
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import { RequirePermissions } from '../../common/auth/permissions.decorator';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
-import { CreateGuardianDto } from './dto/create-guardian.dto';
-import { LinkStudentDto } from './dto/link-student.dto';
-import { ListGuardiansDto } from './dto/list-guardians.dto';
-import { UpdateGuardianDto } from './dto/update-guardian.dto';
+import {
+  CreateGuardianAccountDto,
+  CreateGuardianDto,
+  LinkStudentDto,
+  ListGuardiansDto,
+  UpdateChildContactDto,
+  UpdateGuardianDto,
+  UpdateMyProfileDto,
+} from './dto/guardians.dto';
 import { GuardiansService } from './guardians.service';
 
 @Controller('guardians')
@@ -52,6 +58,26 @@ export class GuardiansController {
     return this.guardians.update(user, guardianId, input);
   }
 
+  @Get(':guardianId/children')
+  @RequirePermissions('guardians:read')
+  children(
+    @CurrentUser() user: SupabaseUser,
+    @Param('guardianId', ParseUUIDPipe) guardianId: string,
+  ) {
+    return this.guardians.children(user, guardianId);
+  }
+
+  @Post(':guardianId/children')
+  @RequirePermissions('guardians:manage')
+  linkChild(
+    @CurrentUser() user: SupabaseUser,
+    @Param('guardianId', ParseUUIDPipe) guardianId: string,
+    @Body() input: LinkStudentDto,
+  ) {
+    return this.guardians.linkStudent(user, guardianId, input);
+  }
+
+  /** Kept for existing clients; same as POST /guardians/:id/children. */
   @Post(':guardianId/students')
   @RequirePermissions('guardians:manage')
   linkStudent(
@@ -60,5 +86,57 @@ export class GuardiansController {
     @Body() input: LinkStudentDto,
   ) {
     return this.guardians.linkStudent(user, guardianId, input);
+  }
+
+  @Delete(':guardianId/children/:studentId')
+  @RequirePermissions('guardians:manage')
+  unlinkChild(
+    @CurrentUser() user: SupabaseUser,
+    @Param('guardianId', ParseUUIDPipe) guardianId: string,
+    @Param('studentId', ParseUUIDPipe) studentId: string,
+  ) {
+    return this.guardians.unlinkStudent(user, guardianId, studentId);
+  }
+
+  @Post(':guardianId/account')
+  @RequirePermissions('guardians:manage', 'users:manage')
+  createAccount(
+    @CurrentUser() user: SupabaseUser,
+    @Param('guardianId', ParseUUIDPipe) guardianId: string,
+    @Body() input: CreateGuardianAccountDto,
+  ) {
+    return this.guardians.createAccount(user, guardianId, input);
+  }
+}
+
+@Controller('me')
+export class MeController {
+  constructor(private readonly guardians: GuardiansService) {}
+
+  @Get('children')
+  children(@CurrentUser() user: SupabaseUser) {
+    return this.guardians.myChildren(user);
+  }
+
+  @Get('children/:studentId')
+  child(
+    @CurrentUser() user: SupabaseUser,
+    @Param('studentId', ParseUUIDPipe) studentId: string,
+  ) {
+    return this.guardians.myChild(user, studentId);
+  }
+
+  @Patch('profile')
+  updateProfile(@CurrentUser() user: SupabaseUser, @Body() input: UpdateMyProfileDto) {
+    return this.guardians.updateMyProfile(user, input);
+  }
+
+  @Patch('children/:studentId/contact-details')
+  updateChildContact(
+    @CurrentUser() user: SupabaseUser,
+    @Param('studentId', ParseUUIDPipe) studentId: string,
+    @Body() input: UpdateChildContactDto,
+  ) {
+    return this.guardians.updateChildContact(user, studentId, input);
   }
 }

@@ -1,10 +1,11 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { AuthorizationService } from './authorization.service';
+import { AccessService } from '../access/access.service';
 import { REQUIRED_PERMISSIONS_KEY } from './permissions.decorator';
 import { SupabaseUser } from './supabase-user.interface';
 
@@ -16,7 +17,7 @@ interface AuthenticatedRequest {
 export class AuthorizationGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly authorization: AuthorizationService,
+    private readonly access: AccessService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -38,10 +39,13 @@ export class AuthorizationGuard implements CanActivate {
       throw new Error('Authorization guard requires an authenticated user');
     }
 
-    await this.authorization.assertPermissions(
-      request.user.id,
-      requiredPermissions,
+    const actor = await this.access.context(request.user);
+    const hasAllPermissions = requiredPermissions.every((permission) =>
+      actor.permissions.has(permission),
     );
+    if (!hasAllPermissions) {
+      throw new ForbiddenException('Required permission is missing');
+    }
     return true;
   }
 }

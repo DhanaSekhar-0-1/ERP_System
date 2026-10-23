@@ -11,12 +11,17 @@ import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import { AssignUserRoleDto } from './dto/assign-user-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { CreatePermissionOverrideDto } from './dto/permission-override.dto';
+import { AccessService } from '../../common/access/access.service';
+import { AuditService } from '../../common/audit/audit.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly database: DatabaseService,
     private readonly supabaseAuth: SupabaseAuthService,
+    private readonly access: AccessService,
+    private readonly audit: AuditService,
   ) {}
 
   async findMany(authUser: SupabaseUser) {
@@ -112,17 +117,30 @@ export class UsersService {
       input.schoolId === undefined ? existing.schoolId ?? undefined : input.schoolId,
     );
 
+    const email = input.email?.trim().toLowerCase();
+    const displayName = input.displayName?.trim();
     try {
-      return await this.database.user.update({
+      const updated = await this.database.user.update({
         where: { id: existing.id },
         data: {
-          email: input.email?.trim().toLowerCase(),
-          displayName: input.displayName?.trim(),
+          email,
+          displayName,
           organizationId: scope.organizationId,
           schoolId: scope.schoolId,
         },
         select: this.userSelect,
       });
+      if ((email && email !== existing.email) || (displayName && displayName !== existing.displayName)) {
+        await this.supabaseAuth.updateManagedUser(existing.authUserId, {
+          email: email && email !== existing.email ? email : undefined,
+          displayName,
+        });
+      }
+      await this.record(authUser, 'user.updated', existing.id, {
+        oldValue: { email: existing.email, displayName: existing.displayName, schoolId: existing.schoolId },
+        newValue: input,
+      });
+      return updated;
     } catch (error) {
       if (this.isUniqueError(error)) {
         throw new ConflictException('A user with this email already exists');
@@ -134,11 +152,16 @@ export class UsersService {
   async activate(authUser: SupabaseUser, userId: string) {
     const actor = await this.getActor(authUser);
     const existing = await this.getScopedUser(actor, userId);
-    return this.database.user.update({
+    const user = await this.database.user.update({
       where: { id: existing.id },
       data: { status: 'ACTIVE' },
       select: this.userSelect,
     });
+    await this.record(authUser, 'user.activated', existing.id, {
+      oldValue: { status: existing.status },
+      newValue: { status: 'ACTIVE' },
+    });
+    return user;
   }
 
   async deactivate(authUser: SupabaseUser, userId: string) {
@@ -148,14 +171,91 @@ export class UsersService {
       throw new BadRequestException('You cannot deactivate your own account');
     }
 
-    return this.database.$transaction(async (transaction) => {
+    const user = await this.database.$transaction(async (transaction) => {
       await this.assertNotLastActiveSchoolAdmin(transaction, existing);
+      await transaction.userSession.updateMany({
+        where: { userId: existing.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
       return transaction.user.update({
         where: { id: existing.id },
         data: { status: 'SUSPENDED' },
         select: this.userSelect,
       });
     });
+    await this.record(authUser, 'user.deactivated', existing.id, {
+      oldValue: { status: existing.status },
+      newValue: { status: 'SUSPENDED' },
+    });
+    return user;
+  }
+
+  async getOverrides(authUser: SupabaseUser, userId: string) {
+    const actor = await this.getActor(authUser);
+    const user = await this.getScopedUser(actor, userId);
+    return this.database.permissionOverride.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      include: { permission: { select: { id: true, code: true, description: true } } },
+    });
+  }
+
+  async addOverride(authUser: SupabaseUser, userId: string, input: CreatePermissionOverrideDto) {
+    const actor = await this.getActor(authUser);
+    const user = await this.getScopedUser(actor, userId);
+    const permission = await this.database.permission.findUnique({
+      where: { code: input.permissionCode },
+    });
+    if (!permission) {
+      throw new NotFoundException('Permission not found');
+    }
+    if (!this.isSuperAdmin(actor) && permission.code.startsWith('organizations:')) {
+      throw new ForbiddenException('School Admin cannot grant organization permissions');
+    }
+    const override = await this.database.permissionOverride.upsert({
+      where: { userId_permissionId: { userId: user.id, permissionId: permission.id } },
+      create: {
+        userId: user.id,
+        permissionId: permission.id,
+        effect: input.effect,
+        reason: input.reason,
+        createdById: actor.id,
+      },
+      update: { effect: input.effect, reason: input.reason, createdById: actor.id },
+      include: { permission: { select: { id: true, code: true } } },
+    });
+    await this.record(authUser, 'permission-override.set', user.id, {
+      newValue: { permission: permission.code, effect: input.effect },
+      reason: input.reason,
+    });
+    return override;
+  }
+
+  async removeOverride(authUser: SupabaseUser, userId: string, overrideId: string) {
+    const actor = await this.getActor(authUser);
+    const user = await this.getScopedUser(actor, userId);
+    const override = await this.database.permissionOverride.findFirst({
+      where: { id: overrideId, userId: user.id },
+      include: { permission: { select: { code: true } } },
+    });
+    if (!override) {
+      throw new NotFoundException('Permission override not found');
+    }
+    await this.database.permissionOverride.delete({ where: { id: override.id } });
+    await this.record(authUser, 'permission-override.removed', user.id, {
+      oldValue: { permission: override.permission.code, effect: override.effect },
+    });
+    return { id: override.id, removed: true };
+  }
+
+  private async record(
+    authUser: SupabaseUser,
+    action: string,
+    userId: string,
+    extra: { oldValue?: unknown; newValue?: unknown; reason?: string },
+  ) {
+    const context = await this.access.context(authUser);
+    await this.audit.record(context, { action, entityType: 'user', entityId: userId, ...extra });
   }
 
   async invite(authUser: SupabaseUser, userId: string) {
@@ -214,6 +314,7 @@ export class UsersService {
       }
       throw error;
     }
+    await this.record(authUser, 'user.role-assigned', user.id, { newValue: { role: role.name } });
     return { userId: user.id, role };
   }
 
@@ -235,6 +336,7 @@ export class UsersService {
       }
       throw error;
     });
+    await this.record(authUser, 'user.role-removed', user.id, { oldValue: { role: role.name } });
     return { userId: user.id, roleId: role.id, removed: true };
   }
 

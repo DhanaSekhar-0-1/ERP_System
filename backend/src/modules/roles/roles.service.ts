@@ -9,13 +9,20 @@ import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
+import { SYSTEM_ROLES } from '../../common/access/roles';
+import { AccessService } from '../../common/access/access.service';
+import { AuditService } from '../../common/audit/audit.service';
 
 @Injectable()
 export class RolesService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly access: AccessService,
+    private readonly audit: AuditService,
+  ) {}
 
   async findMany(authUser: SupabaseUser) {
-    const actor = await this.getActor(authUser);
+    await this.getActor(authUser);
     return this.database.role.findMany({
       orderBy: { name: 'asc' },
       include: {
@@ -66,7 +73,17 @@ export class RolesService {
     input: UpdateRoleDto,
   ) {
     await this.assertSuperAdmin(authUser);
-    await this.findRole(roleId);
+    const role = await this.findRole(roleId);
+    if (input.name !== undefined && input.name.trim() !== role.name && SYSTEM_ROLES.includes(role.name)) {
+      throw new ForbiddenException('Built-in roles cannot be renamed');
+    }
+    await this.audit.record(await this.access.context(authUser), {
+      action: 'role.updated',
+      entityType: 'role',
+      entityId: roleId,
+      oldValue: { name: role.name, description: role.description },
+      newValue: input,
+    });
     try {
       return await this.database.role.update({
         where: { id: roleId },
@@ -118,6 +135,10 @@ export class RolesService {
       throw new NotFoundException('One or more permissions were not found');
     }
 
+    const before = await this.database.rolePermission.findMany({
+      where: { roleId },
+      select: { permission: { select: { code: true } } },
+    });
     await this.database.$transaction(async (transaction) => {
       await transaction.rolePermission.deleteMany({ where: { roleId } });
       if (permissionIds.length) {
@@ -126,7 +147,15 @@ export class RolesService {
         });
       }
     });
-    return this.getPermissions(authUser, roleId);
+    const after = await this.getPermissions(authUser, roleId);
+    await this.audit.record(await this.access.context(authUser), {
+      action: 'role.permissions-replaced',
+      entityType: 'role',
+      entityId: roleId,
+      oldValue: before.map((entry) => entry.permission.code),
+      newValue: after.map((entry) => entry.permission.code),
+    });
+    return after;
   }
 
   private async findRole(roleId: string) {

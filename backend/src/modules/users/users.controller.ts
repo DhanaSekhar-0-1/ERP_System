@@ -14,6 +14,7 @@ import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import { AssignUserRoleDto } from './dto/assign-user-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { CreatePermissionOverrideDto } from './dto/permission-override.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -114,5 +115,34 @@ export class UsersController {
     @Param('roleId', ParseUUIDPipe) roleId: string,
   ) {
     return this.users.removeRole(user, userId, roleId);
+  }
+
+  @Get(':userId/permission-overrides')
+  @RequirePermissions('roles:read')
+  getOverrides(
+    @CurrentUser() user: SupabaseUser,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.users.getOverrides(user, userId);
+  }
+
+  @Post(':userId/permission-overrides')
+  @RequirePermissions('roles:manage')
+  addOverride(
+    @CurrentUser() user: SupabaseUser,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() input: CreatePermissionOverrideDto,
+  ) {
+    return this.users.addOverride(user, userId, input);
+  }
+
+  @Delete(':userId/permission-overrides/:overrideId')
+  @RequirePermissions('roles:manage')
+  removeOverride(
+    @CurrentUser() user: SupabaseUser,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Param('overrideId', ParseUUIDPipe) overrideId: string,
+  ) {
+    return this.users.removeOverride(user, userId, overrideId);
   }
 }

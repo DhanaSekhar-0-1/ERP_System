@@ -5,100 +5,97 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HomeworkStatus } from '@prisma/client';
+import { HomeworkStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../common/database/database.service';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
+import { AccessService, SchoolContext } from '../../common/access/access.service';
+import { AuditService } from '../../common/audit/audit.service';
+import { NotifyService } from '../../common/notify/notify.service';
 import { CreateHomeworkDto } from './dto/create-homework.dto';
 import { SubmitHomeworkDto } from './dto/submit-homework.dto';
 import { UpdateHomeworkDto } from './dto/update-homework.dto';
+import {
+  GradeSubmissionDto,
+  HomeworkQueryDto,
+  ReturnSubmissionDto,
+} from './dto/grade-submission.dto';
 
 @Injectable()
 export class HomeworkService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly access: AccessService,
+    private readonly audit: AuditService,
+    private readonly notify: NotifyService,
+  ) {}
 
   async create(authUser: SupabaseUser, input: CreateHomeworkDto) {
-    const context = await this.getContext(authUser);
+    const context = await this.access.schoolContext(authUser);
     const references = await this.validateReferences(context.schoolId, input);
-    const teacherId = input.teacherId ?? context.staffProfile?.id;
+    const teacherId = input.teacherId ?? context.staffId;
     if (!teacherId) {
       throw new BadRequestException('teacherId is required for homework');
     }
     await this.assertTeacherCanManage(context, teacherId);
-    await this.assertAssignment(
-      context.schoolId,
-      teacherId,
-      input.academicYearId,
-      input.classId,
-      input.subjectId,
-    );
+    await this.assertAssignment(context.schoolId, teacherId, input);
 
-    try {
-      return await this.database.homework.create({
-        data: {
-          schoolId: context.schoolId,
-          academicYearId: references.academicYear.id,
-          classId: references.schoolClass.id,
-          sectionId: references.section.id,
-          subjectId: references.subject.id,
-          teacherId,
-          title: input.title.trim(),
-          description: input.description?.trim() || null,
-          dueDate: input.dueDate ? new Date(input.dueDate) : null,
-          maxMarks: input.maxMarks ?? null,
-        },
-        include: this.includeRelations(),
-      });
-    } catch (error) {
-      if (this.isUniqueError(error)) {
-        throw new ConflictException('Homework could not be created');
-      }
-      throw error;
-    }
+    const homework = await this.database.homework.create({
+      data: {
+        schoolId: context.schoolId,
+        academicYearId: references.academicYear.id,
+        classId: references.schoolClass.id,
+        sectionId: references.section.id,
+        subjectId: references.subject.id,
+        teacherId,
+        title: input.title.trim(),
+        description: input.description?.trim() || null,
+        dueDate: input.dueDate ? new Date(input.dueDate) : null,
+        maxMarks: input.maxMarks ?? null,
+      },
+      include: this.includeRelations(false),
+    });
+    await this.audit.record(context, {
+      action: 'homework.created',
+      entityType: 'homework',
+      entityId: homework.id,
+      newValue: { title: homework.title, sectionId: homework.sectionId },
+    });
+    return homework;
   }
 
-  async findMany(
-    authUser: SupabaseUser,
-    filters: {
-      academicYearId?: string;
-      classId?: string;
-      sectionId?: string;
-      subjectId?: string;
-      teacherId?: string;
-    },
-  ) {
-    const context = await this.getContext(authUser);
-    const teacherScope =
-      this.hasRole(context, 'Teacher') && context.staffProfile
-        ? { teacherId: context.staffProfile.id }
-        : {};
+  async findMany(authUser: SupabaseUser, filters: HomeworkQueryDto) {
+    const context = await this.access.schoolContext(authUser);
+    const visibility = await this.visibleWhere(context);
     return this.database.homework.findMany({
       where: {
-        schoolId: context.schoolId,
-        ...teacherScope,
-        ...(filters.academicYearId ? { academicYearId: filters.academicYearId } : {}),
-        ...(filters.classId ? { classId: filters.classId } : {}),
-        ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
-        ...(filters.subjectId ? { subjectId: filters.subjectId } : {}),
-        ...(filters.teacherId ? { teacherId: filters.teacherId } : {}),
+        AND: [
+          visibility.where,
+          {
+            ...(filters.academicYearId ? { academicYearId: filters.academicYearId } : {}),
+            ...(filters.classId ? { classId: filters.classId } : {}),
+            ...(filters.sectionId ? { sectionId: filters.sectionId } : {}),
+            ...(filters.subjectId ? { subjectId: filters.subjectId } : {}),
+            ...(filters.teacherId ? { teacherId: filters.teacherId } : {}),
+            ...(filters.status && filters.status in HomeworkStatus
+              ? { status: filters.status as HomeworkStatus }
+              : {}),
+          },
+        ],
       },
       orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
-      include: this.includeRelations(),
+      include: this.includeRelations(visibility.submissionStudentIds),
+      take: 500,
     });
   }
 
   async findOne(authUser: SupabaseUser, homeworkId: string) {
-    const context = await this.getContext(authUser);
+    const context = await this.access.schoolContext(authUser);
+    const visibility = await this.visibleWhere(context);
     const homework = await this.database.homework.findFirst({
-      where: { id: homeworkId, schoolId: context.schoolId },
-      include: this.includeRelations(),
+      where: { AND: [{ id: homeworkId }, visibility.where] },
+      include: this.includeRelations(visibility.submissionStudentIds),
     });
     if (!homework) throw new NotFoundException('Homework not found');
-    if (
-      this.hasRole(context, 'Teacher') &&
-      context.staffProfile?.id !== homework.teacherId
-    ) {
-      throw new ForbiddenException('Teachers can read only their assigned homework');
-    }
     return homework;
   }
 
@@ -107,11 +104,11 @@ export class HomeworkService {
     homeworkId: string,
     input: UpdateHomeworkDto,
   ) {
-    const context = await this.getContext(authUser);
-    const existing = await this.database.homework.findFirst({
-      where: { id: homeworkId, schoolId: context.schoolId },
-    });
-    if (!existing) throw new NotFoundException('Homework not found');
+    const context = await this.access.schoolContext(authUser);
+    const existing = await this.manageable(context, homeworkId);
+    if (existing.status === 'ARCHIVED') {
+      throw new BadRequestException('Archived homework cannot be changed');
+    }
 
     const merged = {
       academicYearId: input.academicYearId ?? existing.academicYearId,
@@ -122,15 +119,9 @@ export class HomeworkService {
     };
     const references = await this.validateReferences(context.schoolId, merged);
     await this.assertTeacherCanManage(context, merged.teacherId);
-    await this.assertAssignment(
-      context.schoolId,
-      merged.teacherId,
-      merged.academicYearId,
-      merged.classId,
-      merged.subjectId,
-    );
+    await this.assertAssignment(context.schoolId, merged.teacherId, merged);
 
-    return this.database.homework.update({
+    const updated = await this.database.homework.update({
       where: { id: existing.id },
       data: {
         academicYearId: references.academicYear.id,
@@ -144,45 +135,99 @@ export class HomeworkService {
         dueDate: input.dueDate === undefined ? undefined : new Date(input.dueDate),
         maxMarks: input.maxMarks,
       },
-      include: this.includeRelations(),
+      include: this.includeRelations(false),
     });
+    await this.audit.record(context, {
+      action: 'homework.updated',
+      entityType: 'homework',
+      entityId: existing.id,
+      newValue: input,
+    });
+    return updated;
   }
 
+  /** Deletes a draft. Published homework with submissions must be archived instead. */
   async remove(authUser: SupabaseUser, homeworkId: string) {
-    const context = await this.getContext(authUser);
-    const existing = await this.database.homework.findFirst({
-      where: { id: homeworkId, schoolId: context.schoolId },
+    const context = await this.access.schoolContext(authUser);
+    const existing = await this.manageable(context, homeworkId);
+    const submissions = await this.database.homeworkSubmission.count({ where: { homeworkId } });
+    if (submissions > 0) {
+      throw new ConflictException('Homework with submissions cannot be deleted; archive it instead');
+    }
+    await this.database.homework.delete({ where: { id: existing.id } });
+    await this.audit.record(context, {
+      action: 'homework.deleted',
+      entityType: 'homework',
+      entityId: existing.id,
+      oldValue: { title: existing.title, status: existing.status },
     });
-    if (!existing) throw new NotFoundException('Homework not found');
-    await this.assertTeacherCanManage(context, existing.teacherId);
-    return this.database.homework.delete({ where: { id: existing.id } });
+    return { id: existing.id, deleted: true };
   }
 
   async publish(authUser: SupabaseUser, homeworkId: string) {
-    const context = await this.getContext(authUser);
-    const existing = await this.database.homework.findFirst({
-      where: { id: homeworkId, schoolId: context.schoolId },
-    });
-    if (!existing) throw new NotFoundException('Homework not found');
-    await this.assertTeacherCanManage(context, existing.teacherId);
-    return this.database.homework.update({
+    const context = await this.access.schoolContext(authUser);
+    const existing = await this.manageable(context, homeworkId);
+    if (existing.status !== 'DRAFT') {
+      throw new ConflictException(`Homework is already ${existing.status.toLowerCase()}`);
+    }
+    const published = await this.database.homework.update({
       where: { id: existing.id },
       data: { status: HomeworkStatus.PUBLISHED, publishedAt: new Date() },
-      include: this.includeRelations(),
+      include: this.includeRelations(false),
     });
+    await this.audit.record(context, {
+      action: 'homework.published',
+      entityType: 'homework',
+      entityId: existing.id,
+    });
+    const enrollments = await this.database.enrollment.findMany({
+      where: { sectionId: existing.sectionId, academicYearId: existing.academicYearId, status: 'ACTIVE' },
+      select: { studentId: true },
+    });
+    for (const { studentId } of enrollments) {
+      await this.notify.toStudentFamily(studentId, {
+        type: 'homework.assigned',
+        title: `New homework: ${published.subject.name}`,
+        body: published.dueDate
+          ? `${published.title} (due ${published.dueDate.toISOString().slice(0, 10)})`
+          : published.title,
+        data: { homeworkId: existing.id },
+      });
+    }
+    return published;
+  }
+
+  async archive(authUser: SupabaseUser, homeworkId: string) {
+    const context = await this.access.schoolContext(authUser);
+    const existing = await this.manageable(context, homeworkId);
+    if (existing.status === 'ARCHIVED') {
+      throw new ConflictException('Homework is already archived');
+    }
+    const archived = await this.database.homework.update({
+      where: { id: existing.id },
+      data: { status: HomeworkStatus.ARCHIVED },
+      include: this.includeRelations(false),
+    });
+    await this.audit.record(context, {
+      action: 'homework.archived',
+      entityType: 'homework',
+      entityId: existing.id,
+    });
+    return archived;
   }
 
   async findForStudent(authUser: SupabaseUser, studentId: string) {
-    const context = await this.getContext(authUser);
-    const student = await this.database.student.findFirst({
-      where: { id: studentId, schoolId: context.schoolId },
-    });
-    if (!student) throw new NotFoundException('Student not found');
-    await this.assertStudentReadAccess(context, studentId);
+    const context = await this.access.schoolContext(authUser);
+    await this.access.assertStudentAccess(context, studentId);
 
     const enrollment = await this.database.enrollment.findFirst({
-      where: { studentId, schoolId: context.schoolId, status: 'ACTIVE' },
-      orderBy: { academicYearId: 'desc' },
+      where: {
+        studentId,
+        schoolId: context.schoolId,
+        status: 'ACTIVE',
+        academicYear: { isClosed: false },
+      },
+      orderBy: { academicYear: { startsOn: 'desc' } },
     });
     if (!enrollment) return [];
 
@@ -203,13 +248,25 @@ export class HomeworkService {
     });
   }
 
+  async submissions(authUser: SupabaseUser, homeworkId: string) {
+    const context = await this.access.schoolContext(authUser);
+    await this.manageable(context, homeworkId);
+    return this.database.homeworkSubmission.findMany({
+      where: { homeworkId },
+      orderBy: { submittedAt: 'asc' },
+      include: {
+        student: { select: { id: true, firstName: true, lastName: true, admissionNo: true } },
+      },
+    });
+  }
+
   async submit(
     authUser: SupabaseUser,
     homeworkId: string,
     input: SubmitHomeworkDto,
   ) {
-    const context = await this.getContext(authUser);
-    const studentId = context.studentProfile?.id;
+    const context = await this.access.schoolContext(authUser);
+    const studentId = context.studentId;
     if (!studentId) {
       throw new ForbiddenException('Only a student can submit homework');
     }
@@ -240,6 +297,15 @@ export class HomeworkService {
       throw new ForbiddenException('Student is not enrolled in this homework class');
     }
 
+    const existing = await this.database.homeworkSubmission.findUnique({
+      where: { homeworkId_studentId: { homeworkId: homework.id, studentId } },
+    });
+    if (existing?.status === 'GRADED') {
+      throw new ConflictException('This submission has already been graded');
+    }
+    const today = new Date(new Date().toISOString().slice(0, 10));
+    const isLate = Boolean(homework.dueDate && today > homework.dueDate);
+
     return this.database.homeworkSubmission.upsert({
       where: { homeworkId_studentId: { homeworkId: homework.id, studentId } },
       create: {
@@ -248,15 +314,128 @@ export class HomeworkService {
         studentId,
         content: input.content?.trim() || null,
         attachmentUrl: input.attachmentUrl?.trim() || null,
+        isLate,
       },
       update: {
         content: input.content?.trim() || null,
         attachmentUrl: input.attachmentUrl?.trim() || null,
         submittedAt: new Date(),
         status: 'SUBMITTED',
+        isLate,
       },
-      include: { homework: true, student: true },
     });
+  }
+
+  async grade(
+    authUser: SupabaseUser,
+    homeworkId: string,
+    submissionId: string,
+    input: GradeSubmissionDto,
+  ) {
+    const context = await this.access.schoolContext(authUser);
+    const homework = await this.manageable(context, homeworkId);
+    if (homework.maxMarks !== null && input.score > homework.maxMarks) {
+      throw new BadRequestException(`Score cannot exceed ${homework.maxMarks}`);
+    }
+    const submission = await this.scopedSubmission(homeworkId, submissionId);
+    const graded = await this.database.homeworkSubmission.update({
+      where: { id: submission.id },
+      data: {
+        status: 'GRADED',
+        score: input.score,
+        feedback: input.feedback?.trim() || null,
+        gradedById: context.userId,
+        gradedAt: new Date(),
+      },
+    });
+    await this.audit.record(context, {
+      action: 'homework.graded',
+      entityType: 'homework-submission',
+      entityId: submission.id,
+      oldValue: { score: submission.score, status: submission.status },
+      newValue: { score: input.score, status: 'GRADED' },
+    });
+    await this.notify.toStudentFamily(submission.studentId, {
+      type: 'homework.graded',
+      title: 'Homework graded',
+      body: `${homework.title}: ${input.score}${homework.maxMarks !== null ? ` / ${homework.maxMarks}` : ''}`,
+      data: { homeworkId, submissionId },
+    });
+    return graded;
+  }
+
+  async returnSubmission(
+    authUser: SupabaseUser,
+    homeworkId: string,
+    submissionId: string,
+    input: ReturnSubmissionDto,
+  ) {
+    const context = await this.access.schoolContext(authUser);
+    await this.manageable(context, homeworkId);
+    const submission = await this.scopedSubmission(homeworkId, submissionId);
+    const returned = await this.database.homeworkSubmission.update({
+      where: { id: submission.id },
+      data: { status: 'RETURNED', feedback: input.feedback.trim(), score: null },
+    });
+    await this.audit.record(context, {
+      action: 'homework.returned',
+      entityType: 'homework-submission',
+      entityId: submission.id,
+      reason: input.feedback,
+    });
+    return returned;
+  }
+
+  private async scopedSubmission(homeworkId: string, submissionId: string) {
+    const submission = await this.database.homeworkSubmission.findFirst({
+      where: { id: submissionId, homeworkId },
+    });
+    if (!submission) throw new NotFoundException('Submission not found');
+    return submission;
+  }
+
+  /**
+   * Leaders see all homework; teachers their own; students and parents only published
+   * homework for their children's sections, with only their own submissions.
+   */
+  private async visibleWhere(context: SchoolContext): Promise<{
+    where: Prisma.HomeworkWhereInput;
+    submissionStudentIds: string[] | true;
+  }> {
+    if (context.isLeader) {
+      return { where: { schoolId: context.schoolId }, submissionStudentIds: true };
+    }
+    if (context.isTeacher && context.staffId) {
+      return {
+        where: { schoolId: context.schoolId, teacherId: context.staffId },
+        submissionStudentIds: true,
+      };
+    }
+    const scope = await this.access.studentScope(context);
+    const ids = scope.all ? [] : scope.ids;
+    const enrollments = await this.database.enrollment.findMany({
+      where: { studentId: { in: ids }, status: 'ACTIVE', schoolId: context.schoolId },
+      select: { sectionId: true, academicYearId: true },
+    });
+    return {
+      where: {
+        schoolId: context.schoolId,
+        status: HomeworkStatus.PUBLISHED,
+        OR: enrollments.length
+          ? enrollments.map((e) => ({ sectionId: e.sectionId, academicYearId: e.academicYearId }))
+          : [{ id: '00000000-0000-0000-0000-000000000000' }],
+      },
+      submissionStudentIds: ids,
+    };
+  }
+
+  private async manageable(context: SchoolContext, homeworkId: string) {
+    const homework = await this.database.homework.findFirst({
+      where: { id: homeworkId, schoolId: context.schoolId },
+    });
+    if (!homework) throw new NotFoundException('Homework not found');
+    await this.assertTeacherCanManage(context, homework.teacherId);
+    return homework;
   }
 
   private async validateReferences(
@@ -281,6 +460,7 @@ export class HomeworkService {
           schoolId,
           academicYearId: input.academicYearId,
           classId: input.classId,
+          isArchived: false,
         },
       }),
       this.database.subject.findFirst({
@@ -292,30 +472,38 @@ export class HomeworkService {
         'Academic year, class, section, or subject not found in this school',
       );
     }
+    if (academicYear.isClosed) {
+      throw new BadRequestException('This academic year is closed');
+    }
     return { academicYear, schoolClass, section, subject };
   }
 
+  /** The teacher must teach this subject to the whole class or to this section. */
   private async assertAssignment(
     schoolId: string,
     staffId: string,
-    academicYearId: string,
-    classId: string,
-    subjectId: string,
+    input: { academicYearId: string; classId: string; sectionId: string; subjectId: string },
   ) {
     const assignment = await this.database.staffAssignment.findFirst({
-      where: { schoolId, staffId, academicYearId, classId, subjectId },
+      where: {
+        schoolId,
+        staffId,
+        academicYearId: input.academicYearId,
+        classId: input.classId,
+        subjectId: input.subjectId,
+        OR: [{ sectionId: null }, { sectionId: input.sectionId }],
+      },
     });
     if (!assignment) {
-      throw new ForbiddenException('Teacher is not assigned to this class and subject');
+      throw new ForbiddenException('Teacher is not assigned to this class, section and subject');
     }
   }
 
-  private async assertTeacherCanManage(
-    context: Awaited<ReturnType<HomeworkService['getContext']>>,
-    teacherId: string,
-  ) {
-    if (this.hasRole(context, 'Teacher') && context.staffProfile?.id !== teacherId) {
-      throw new ForbiddenException('Teachers can manage only their assigned homework');
+  private async assertTeacherCanManage(context: SchoolContext, teacherId: string) {
+    if (!context.isLeader) {
+      if (!context.isTeacher || context.staffId !== teacherId) {
+        throw new ForbiddenException('Teachers can manage only their assigned homework');
+      }
     }
     const teacher = await this.database.staffProfile.findFirst({
       where: { id: teacherId, schoolId: context.schoolId },
@@ -324,69 +512,18 @@ export class HomeworkService {
     if (!teacher) throw new NotFoundException('Teacher not found in this school');
   }
 
-  private async assertStudentReadAccess(
-    context: Awaited<ReturnType<HomeworkService['getContext']>>,
-    studentId: string,
-  ) {
-    if (context.studentProfile?.id === studentId) return;
-    const linkedGuardian = await this.database.studentGuardian.findFirst({
-      where: { studentId, guardian: { userId: context.id } },
-      select: { studentId: true },
-    });
-    if (
-      linkedGuardian ||
-      context.staffProfile ||
-      this.hasRole(context, 'School Admin') ||
-      this.hasRole(context, 'Principal') ||
-      this.hasRole(context, 'Super Admin')
-    ) {
-      return;
-    }
-    throw new ForbiddenException('You cannot read homework for this student');
-  }
-
-  private async getContext(authUser: SupabaseUser) {
-    const user = await this.database.user.findUnique({
-      where: { authUserId: authUser.id },
-      select: {
-        id: true,
-        schoolId: true,
-        status: true,
-        staffProfile: { select: { id: true } },
-        studentProfile: { select: { id: true } },
-        roles: { select: { role: { select: { name: true } } } },
-      },
-    });
-    if (!user) throw new ForbiddenException('ERP user profile is required');
-    if (user.status !== 'ACTIVE') throw new ForbiddenException('ERP user is not active');
-    if (!user.schoolId) throw new ForbiddenException('ERP user is not assigned to a school');
-    return { ...user, schoolId: user.schoolId };
-  }
-
-  private hasRole(
-    context: Awaited<ReturnType<HomeworkService['getContext']>>,
-    name: string,
-  ) {
-    return context.roles.some((userRole) => userRole.role.name === name);
-  }
-
-  private includeRelations() {
+  private includeRelations(submissionStudentIds: string[] | boolean) {
     return {
-      academicYear: true,
-      class: true,
-      section: true,
-      subject: true,
-      teacher: { include: { user: { select: { id: true, displayName: true, email: true } } } },
-      submissions: true,
+      academicYear: { select: { id: true, name: true } },
+      class: { select: { id: true, name: true } },
+      section: { select: { id: true, name: true } },
+      subject: { select: { id: true, name: true, code: true } },
+      teacher: { include: { user: { select: { id: true, displayName: true } } } },
+      ...(submissionStudentIds === true
+        ? { submissions: true }
+        : Array.isArray(submissionStudentIds)
+          ? { submissions: { where: { studentId: { in: submissionStudentIds } } } }
+          : {}),
     };
-  }
-
-  private isUniqueError(error: unknown): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'P2002'
-    );
   }
 }

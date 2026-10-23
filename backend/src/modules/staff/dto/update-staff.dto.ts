@@ -15,4 +15,12 @@ export class UpdateStaffDto {
   @IsString()
   @MinLength(1)
   nfcId?: string;
+
+  @IsOptional()
+  @IsString()
+  designation?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
 }

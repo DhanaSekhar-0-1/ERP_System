@@ -1,19 +1,74 @@
-import { IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 
 export class CreateStaffAssignmentDto {
-  @IsString()
-  @MinLength(1)
+  @IsUUID()
   staffId!: string;
 
-  @IsString()
-  @MinLength(1)
+  @IsUUID()
   academicYearId!: string;
 
-  @IsString()
-  @MinLength(1)
+  @IsUUID()
   classId!: string;
 
-  @IsString()
-  @MinLength(1)
+  /** Omit to cover every section of the class. */
+  @IsOptional()
+  @IsUUID()
+  sectionId?: string;
+
+  @IsUUID()
   subjectId!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isClassTeacher?: boolean;
+
+  @IsOptional()
+  @IsDateString()
+  effectiveFrom?: string;
+}
+
+export class StaffAssignmentInputDto {
+  @IsUUID()
+  academicYearId!: string;
+
+  @IsUUID()
+  classId!: string;
+
+  @IsOptional()
+  @IsUUID()
+  sectionId?: string;
+
+  @IsUUID()
+  subjectId!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isClassTeacher?: boolean;
+
+  @IsOptional()
+  @IsDateString()
+  effectiveFrom?: string;
+}
+
+/** Reassigns an existing assignment to another teacher or section. */
+export class ReassignStaffAssignmentDto {
+  @IsOptional()
+  @IsUUID()
+  staffId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  sectionId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isClassTeacher?: boolean;
+
+  @IsOptional()
+  @IsDateString()
+  effectiveFrom?: string;
+
+  @IsString()
+  @MinLength(3)
+  reason!: string;
 }

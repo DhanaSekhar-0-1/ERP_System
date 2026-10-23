@@ -5,5 +5,6 @@ import { StaffAssignmentsService } from './staff-assignments.service';
 @Module({
   controllers: [StaffAssignmentsController],
   providers: [StaffAssignmentsService],
+  exports: [StaffAssignmentsService],
 })
 export class StaffAssignmentsModule {}

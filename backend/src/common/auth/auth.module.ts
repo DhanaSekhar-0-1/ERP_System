@@ -3,7 +3,6 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthorizationGuard } from './authorization.guard';
-import { AuthorizationService } from './authorization.service';
 import { SupabaseAuthGuard } from './supabase-auth.guard';
 import { SupabaseAuthService } from './supabase-auth.service';
 
@@ -11,7 +10,6 @@ import { SupabaseAuthService } from './supabase-auth.service';
 @Module({
   providers: [
     AuthService,
-    AuthorizationService,
     SupabaseAuthService,
     {
       provide: APP_GUARD,
@@ -23,6 +21,6 @@ import { SupabaseAuthService } from './supabase-auth.service';
     },
   ],
   controllers: [AuthController],
-  exports: [AuthorizationService, SupabaseAuthService],
+  exports: [SupabaseAuthService],
 })
 export class AuthModule {}

@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsDateString, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 
 export class UpdateStudentDto {
   @IsOptional()
@@ -23,4 +23,23 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsDateString()
   dateOfBirth?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  /** Required when changing name, date of birth or admission number (Tier 4). */
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  reason?: string;
+
+  /** Supporting document (ID proof) for Tier 4 changes. */
+  @IsOptional()
+  @IsUUID()
+  documentFileId?: string;
 }
