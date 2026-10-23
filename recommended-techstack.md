@@ -1,8 +1,7 @@
 # Recommended Production Technology Stack
 
-Passwordencoded on databse_url because password contains # on Amma143#0000
-     
-	 # → %23
+Note: if the database password contains URL-reserved characters, URL-encode
+them in `DATABASE_URL` and `DIRECT_URL` (for example `#` becomes `%23`).
 
 ## Project Context
 

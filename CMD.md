@@ -24,3 +24,19 @@ curl -i http://localhost:3000/api/v1/permissions
 curl -i http://localhost:3000/api/v1/students
 curl -i http://localhost:3000/api/v1/homework
 curl -i http://localhost:3000/api/v1/announcements
+
+Login manually :
+
+curl -X POST http://localhost:3000/api/v1/auth/login ^
+  -H "Content-Type: application/json" ^
+  -d "{\"identifier\":\"test.admin@erp.local\",\"password\":\"YOUR_PASSWORD\"}"
+  
+  
+ Then call a protected API:
+ 
+ curl http://localhost:3000/api/v1/users ^
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+  
+  port start and stop
+  netstat -ano | findstr :3000
+  taskkill /PID YOUR_PID /F

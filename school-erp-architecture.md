@@ -263,6 +263,11 @@ Conflict resolution for synced offline data: last-write-wins is unsafe for atten
 
 ## 20. Web + Mobile Architecture
 
+> **Superseded:** the final stack is defined in
+> [recommended-techstack.md](./recommended-techstack.md). In particular, mobile
+> uses React Native + Expo (not Flutter) and authentication uses Supabase Auth
+> with authorization in NestJS. The text below is kept as original rationale.
+
 **Recommended stack (optimized for team size, cost, and Indian-school scale — thousands, not millions, of concurrent users per school):**
 
 - **Backend:** Node.js with NestJS (or FastAPI if the team is more Python-leaning) — both offer strong typing/structure for a system with this many interrelated modules and permission rules, and both have mature ecosystems for RBAC, background jobs, and REST/GraphQL APIs.

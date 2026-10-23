@@ -1,0 +1,13 @@
+# Local credentials and notes
+test-org-school.txt
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.log
