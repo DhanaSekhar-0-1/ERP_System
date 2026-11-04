@@ -1,4 +1,5 @@
 import { Transform } from 'class-transformer';
+import { DeliveryStatus } from '@prisma/client';
 import { IsArray, IsBoolean, IsIn, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/http/pagination';
 
@@ -7,6 +8,20 @@ export class NotificationQueryDto extends PaginationQueryDto {
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   unreadOnly?: boolean;
+}
+
+export class DeliveryQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @IsIn(['QUEUED', 'SENDING', 'SENT', 'FAILED', 'SKIPPED'])
+  status?: DeliveryStatus;
+
+  @IsOptional()
+  @IsIn(['IN_APP', 'PUSH', 'SMS', 'EMAIL'])
+  channel?: string;
+
+  @IsOptional()
+  @IsUUID()
+  notificationId?: string;
 }
 
 export class UpdatePreferencesDto {

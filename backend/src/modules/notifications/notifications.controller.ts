@@ -14,6 +14,7 @@ import { RequirePermissions } from '../../common/auth/permissions.decorator';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import {
   CreateTemplateDto,
+  DeliveryQueryDto,
   NotificationQueryDto,
   RegisterDeviceDto,
   TestNotificationDto,
@@ -107,7 +108,22 @@ export class NotificationSettingsController {
 
   @Get('notification-deliveries')
   @RequirePermissions('notifications:manage')
-  deliveries(@CurrentUser() user: SupabaseUser, @Query() query: NotificationQueryDto) {
+  deliveries(@CurrentUser() user: SupabaseUser, @Query() query: DeliveryQueryDto) {
     return this.notifications.deliveries(user, query);
+  }
+
+  @Post('notification-deliveries/process')
+  @RequirePermissions('notifications:manage')
+  processDeliveries(@CurrentUser() user: SupabaseUser) {
+    return this.notifications.processDeliveries(user);
+  }
+
+  @Post('notification-deliveries/:deliveryId/retry')
+  @RequirePermissions('notifications:manage')
+  retryDelivery(
+    @CurrentUser() user: SupabaseUser,
+    @Param('deliveryId', ParseUUIDPipe) deliveryId: string,
+  ) {
+    return this.notifications.retryDelivery(user, deliveryId);
   }
 }

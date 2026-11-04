@@ -58,6 +58,25 @@ export class BulkAttendanceDto {
   reason?: string;
 }
 
+export class NfcScanDto {
+  @IsString()
+  @MinLength(1)
+  nfcId!: string;
+
+  @IsDateString()
+  attendanceDate!: string;
+
+  /** When set, a card belonging to a student of another section is refused. */
+  @IsOptional()
+  @IsUUID()
+  sectionId?: string;
+}
+
+export class MySectionsQueryDto {
+  @IsDateString()
+  attendanceDate!: string;
+}
+
 export class CorrectionRequestDto {
   @IsEnum(AttendanceStatus)
   status!: AttendanceStatus;

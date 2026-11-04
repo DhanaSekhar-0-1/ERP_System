@@ -1,0 +1,13 @@
+{
+  "name": "school-erp",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "web": "npm run dev --workspace @erp/web",
+    "mobile": "npm run start --workspace @erp/mobile",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

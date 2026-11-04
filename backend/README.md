@@ -83,6 +83,28 @@ completes it. The change is applied in the same transaction as the final approva
 values, reason, approval id, IP, request id). There are no update or delete routes
 for audit entries. Search with `/audit-logs`, export with `/audit-logs/export`.
 
+**Row-Level Security.** Every table in `public` has RLS enabled with no policies, and
+the Supabase Data API roles `anon` and `authenticated` hold no privileges on tables,
+sequences or functions (default privileges revoke them for future objects too). The
+PostgREST/GraphQL endpoints therefore return permission errors even with a valid user
+token; all access goes through this API, which connects as the table owner. New
+migrations keep this automatically; verify with `npm run db:check-rls`. If a future
+feature needs direct client access (e.g. Realtime), add explicit policies for that table.
+
+**Notification delivery.** `NotifyService` writes an in-app notification plus a
+QUEUED delivery row for each channel the user enabled. `DeliveryWorker` polls every
+`NOTIFICATION_WORKER_INTERVAL_MS` (default 5000; `NOTIFICATION_WORKER_ENABLED=false`
+turns it off), claims rows with `FOR UPDATE SKIP LOCKED` so several instances can run,
+applies the school (or global) template for the notification type and channel, and sends
+through FCM (push), Twilio (SMS) or Resend (email) when their env vars are set. Without a
+provider, development logs to the console and production marks the row FAILED.
+Outcomes: SENT; SKIPPED when there is no phone number or registered device; retried with
+exponential backoff (30s, 60s, 120s...) and FAILED after 5 attempts or on a permanent
+provider error. Invalid FCM tokens are removed. Admins can filter
+`/notification-deliveries?status=&channel=&notificationId=`, retry with
+`POST /notification-deliveries/:id/retry`, and run a batch now with
+`POST /notification-deliveries/process`.
+
 ## Modules
 
 | Area | Base routes |
@@ -93,7 +115,7 @@ for audit entries. Search with `/audit-logs`, export with `/audit-logs/export`.
 | Daily work | `/attendance`, `/homework`, `/announcements`, `/student-leaves`, `/staff-leaves` |
 | Academics | `/examinations`, `/marks`, `/students/:id/report-cards`, `/timetables`, `/timetable-slots`, `/substitute-requests` |
 | Finance | `/fee-structures`, `/student-fees`, `/payments`, `/payments/webhooks/*`, `/fees/overdue`, `/fees/reports` |
-| Communication | `/notifications`, `/notification-preferences`, `/devices`, `/notification-templates`, `/feedback`, `/complaints` |
+| Communication | `/notifications`, `/notification-preferences`, `/devices`, `/notification-templates`, `/notification-deliveries`, `/feedback`, `/complaints` |
 | Records | `/files`, `/certificates`, `/approval-requests`, `/audit-logs`, `/security-events` |
 | Insight | `/dashboards/*`, `/reports/*`, `/analytics/*` |
 | Phase 3 | `/transport/*`, `/library/*`, `/assets` |
@@ -115,7 +137,8 @@ npm run prisma:bootstrap-admin -- `
   --school-code=EXAMPLE-001
 ```
 
-Create the test organization, school, and admin/teacher/student accounts:
+Create the test organization, school, and admin/teacher/student/principal accounts
+(add `--only=principal` to create just one account without resetting the others):
 
 ```powershell
 npm run prisma:bootstrap-test-accounts -- `

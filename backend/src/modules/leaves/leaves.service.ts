@@ -484,28 +484,32 @@ export class LeavesService {
   }
 
   private async openSubstitutes(transaction: Prisma.TransactionClient, leave: StaffLeave): Promise<number> {
+    // Only the active year's timetable is taught; older published timetables must not open requests.
     const slots = await transaction.timetableSlot.findMany({
-      where: { staffId: leave.staffId, timetable: { status: { in: ['PUBLISHED', 'LOCKED'] } } },
+      where: {
+        staffId: leave.staffId,
+        timetable: {
+          status: { in: ['PUBLISHED', 'LOCKED'] },
+          academicYear: { schoolId: leave.schoolId, isActive: true, isClosed: false },
+        },
+      },
     });
-    let opened = 0;
-    for (const day of schoolDays(leave.fromDate, leave.toDate)) {
-      for (const slot of slots.filter((entry) => entry.dayOfWeek === isoWeekday(day))) {
-        await transaction.substituteRequest.upsert({
-          where: { slotId_date: { slotId: slot.id, date: day } },
-          create: {
-            schoolId: leave.schoolId,
-            date: day,
-            slotId: slot.id,
-            originalStaffId: leave.staffId,
-            staffLeaveId: leave.id,
-            reason: `Staff leave: ${leave.reason}`,
-          },
-          update: {},
-        });
-        opened += 1;
-      }
+    const rows = schoolDays(leave.fromDate, leave.toDate).flatMap((day) =>
+      slots
+        .filter((entry) => entry.dayOfWeek === isoWeekday(day))
+        .map((slot) => ({
+          schoolId: leave.schoolId,
+          date: day,
+          slotId: slot.id,
+          originalStaffId: leave.staffId,
+          staffLeaveId: leave.id,
+          reason: `Staff leave: ${leave.reason}`,
+        })),
+    );
+    if (rows.length) {
+      await transaction.substituteRequest.createMany({ data: rows, skipDuplicates: true });
     }
-    return opened;
+    return rows.length;
   }
 
   private async classTeacherUserIds(studentId: string): Promise<string[]> {

@@ -4,12 +4,16 @@
  *   node test/e2e/erp-flow.e2e.mjs
  *
  * Env: API_URL (default http://localhost:3000/api/v1), CREDENTIALS_FILE (default ../test-org-school.txt),
- *      RAZORPAY_WEBHOOK_SECRET (must match the server; default dev_webhook_secret).
+ *      RAZORPAY_WEBHOOK_SECRET (must match the server; default dev_webhook_secret),
+ *      SUPABASE_URL and SUPABASE_ANON_KEY (read from .env) for the direct Data API checks.
  * Each run creates its own academic year and records, so it can be repeated.
  */
 import { createHmac, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { config } from 'dotenv';
+
+config({ quiet: true });
 
 const API = process.env.API_URL ?? 'http://localhost:3000/api/v1';
 const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET ?? 'dev_webhook_secret';
@@ -30,7 +34,7 @@ function credentials() {
       password: chunk.match(/Password:\s*(\S+)/)[1],
     };
   };
-  return { admin: block('Admin'), teacher: block('Teacher'), student: block('Student') };
+  return { admin: block('Admin'), teacher: block('Teacher'), student: block('Student'), principal: block('Principal') };
 }
 
 function day(offset = 0) {
@@ -80,6 +84,17 @@ async function login(identifier, password) {
   return response.data.session.access_token;
 }
 
+/** Runs the delivery worker until none of the notification's deliveries are QUEUED or SENDING. */
+async function settleDeliveries(token, notificationId) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await call(token, 'POST', '/notification-deliveries/process', {});
+    const rows = (await call(token, 'GET', `/notification-deliveries?notificationId=${notificationId}`)).data ?? [];
+    if (rows.length && rows.every((row) => !['QUEUED', 'SENDING'].includes(row.status))) return rows;
+    await new Promise((done) => setTimeout(done, 500));
+  }
+  return (await call(token, 'GET', `/notification-deliveries?notificationId=${notificationId}`)).data ?? [];
+}
+
 function heading(title) {
   section = title;
   console.log(`\n== ${title}`);
@@ -94,7 +109,8 @@ async function main() {
   const admin = await login(creds.admin.email, creds.admin.password);
   const teacher = await login(creds.teacher.email, creds.teacher.password);
   const student = await login(creds.student.email, creds.student.password);
-  check('admin, teacher and student log in', admin && teacher && student);
+  const principal = await login(creds.principal.email, creds.principal.password);
+  check('admin, teacher, student and principal log in', admin && teacher && student && principal);
   await expect('wrong password is rejected', null, 'POST', '/auth/login', { identifier: creds.admin.email, password: 'wrong-password-1' }, 401);
   const anon = await call(null, 'GET', '/students');
   check('anonymous request gets 401 in the envelope', anon.status === 401 && anon.error?.statusCode === 401, anon);
@@ -107,6 +123,26 @@ async function main() {
   await expect('logout a second teacher session', extra, 'POST', '/auth/logout', {}, [200, 201]);
   await expect('logged-out token is refused', extra, 'GET', '/auth/me', undefined, 401);
   await expect('invalid UUID query is a 400, not a 500', admin, 'GET', '/attendance?enrollmentId=not-a-uuid', undefined, 400);
+
+  heading('Direct database access (Row-Level Security)');
+  const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    check('SUPABASE_URL and SUPABASE_ANON_KEY are set for the Data API checks', false, 'missing in .env');
+  } else {
+    const dataApi = (token, method, table, body) => fetch(`${SUPABASE_URL}/rest/v1/${table}${method === 'GET' ? '?select=id&limit=1' : ''}`, {
+      method,
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: body && JSON.stringify(body),
+    });
+    for (const [who, token] of [['anon key', SUPABASE_ANON_KEY], ['signed-in user token', admin]]) {
+      for (const table of ['students', 'users', 'payments', 'audit_logs', 'marks']) {
+        const response = await dataApi(token, 'GET', table);
+        check(`${who} cannot read ${table} through the Data API`, [401, 403].includes(response.status), `${response.status} ${(await response.text()).slice(0, 120)}`);
+      }
+      const write = await dataApi(token, 'POST', 'audit_logs', { action: 'rls.probe' });
+      check(`${who} cannot write through the Data API`, [401, 403].includes(write.status), write.status);
+    }
+  }
 
   heading('School structure (School Admin)');
   const schoolId = me.schoolId;
@@ -221,6 +257,19 @@ async function main() {
   const sectionView = (await expect('teacher section view', teacher, 'GET', `/sections/${secA.id}/attendance?attendanceDate=${day(0)}`)).data;
   check('section view lists students', sectionView?.length >= 1, sectionView);
   await expect('teacher blocked from an unassigned section', teacher, 'GET', `/sections/${secB.id}/attendance`, undefined, [200, 403]);
+  const scan = (await expect('teacher taps a card', teacher, 'POST', '/attendance/nfc-scan', { nfcId: `NFC-E2E-${RUN}`, attendanceDate: day(0) })).data;
+  check('card tap marks PRESENT with source NFC', scan?.result === 'marked' && scan.record.status === 'PRESENT' && scan.record.source === 'NFC', scan);
+  const rescan = (await expect('second tap', teacher, 'POST', '/attendance/nfc-scan', { nfcId: `NFC-E2E-${RUN}`, attendanceDate: day(0) })).data;
+  check('second tap keeps the saved record', rescan?.result === 'already_marked' && rescan.record.id === scan?.record.id, rescan);
+  await expect('unknown card is a 404', teacher, 'POST', '/attendance/nfc-scan', { nfcId: 'NFC-NOT-ISSUED', attendanceDate: day(0) }, 404);
+  const scannedSection = scan?.record.enrollment.section.id;
+  await expect('card from another section is refused', teacher, 'POST', '/attendance/nfc-scan', { nfcId: `NFC-E2E-${RUN}`, attendanceDate: day(0), sectionId: scannedSection === secA.id ? secB.id : secA.id }, 400);
+  await expect('future card tap is refused', teacher, 'POST', '/attendance/nfc-scan', { nfcId: `NFC-E2E-${RUN}`, attendanceDate: day(2) }, 400);
+  await expect('student cannot use card scanning', student, 'POST', '/attendance/nfc-scan', { nfcId: `NFC-E2E-${RUN}`, attendanceDate: day(0) }, 403);
+  const mySections = (await expect('teacher lists own sections', teacher, 'GET', `/attendance/my-sections?attendanceDate=${day(0)}`)).data;
+  check('section progress counts the tap', mySections?.some((s) => s.id === scannedSection && s.marked >= 1), mySections);
+  const teacherContext = (await expect('teacher reads own context', teacher, 'GET', '/auth/context')).data;
+  check('context names the role and staff profile', teacherContext?.roles.includes('Teacher') && teacherContext.staffId, teacherContext);
   const att = (await expect('attendance summary', admin, 'GET', `/attendance/summary?from=${day(-10)}&to=${day(0)}&sectionId=${secA.id}`)).data;
   check('summary has a rate', typeof att?.attendanceRate === 'number', att);
   const csv = await call(admin, 'GET', `/attendance/export?from=${day(-10)}&to=${day(0)}`, undefined, { raw: true });
@@ -301,7 +350,21 @@ async function main() {
     const afterAdmin = (await expect('School Admin approves first slot', admin, 'POST', `/approval-requests/${markCorrection.approvalRequest.id}/approve`, {})).data;
     check('still pending: needs Principal too', afterAdmin?.status === 'PENDING', afterAdmin?.status);
     await expect('same admin cannot approve twice', admin, 'POST', `/approval-requests/${markCorrection.approvalRequest.id}/approve`, {}, 409);
-    await expect('requester cancels the request', teacher, 'POST', `/approval-requests/${markCorrection.approvalRequest.id}/cancel`, {});
+    await expect('teacher cannot approve', teacher, 'POST', `/approval-requests/${markCorrection.approvalRequest.id}/approve`, {}, 403);
+    const principalQueue = (await expect('principal sees pending requests', principal, 'GET', '/approval-requests?status=PENDING')).data;
+    check('mark correction is in the principal queue', principalQueue?.some((r) => r.id === markCorrection.approvalRequest.id), principalQueue?.length);
+    const finalMark = (await expect('Principal approves second slot', principal, 'POST', `/approval-requests/${markCorrection.approvalRequest.id}/approve`, { note: 'Recount verified' })).data;
+    check('Tier 4 request is approved with both decisions', finalMark?.status === 'APPROVED' && finalMark.decisions?.length === 2, finalMark);
+    await expect('approved request cannot be approved again', principal, 'POST', `/approval-requests/${markCorrection.approvalRequest.id}/approve`, {}, 409);
+    const correctedMark = (await call(student, 'GET', '/marks')).data?.find((m) => m.id === ownMark.id);
+    check('corrected mark is applied (44)', Number(correctedMark?.marksObtained) === 44, correctedMark);
+    const rejected = (await expect('second Tier 4 mark correction', teacher, 'POST', `/marks/${ownMark.id}/correction-request`, {
+      marksObtained: 46, reason: 'Second recount', documentFileId: fileId,
+    })).data;
+    const rejection = (await expect('Principal rejects it', principal, 'POST', `/approval-requests/${rejected.approvalRequest.id}/reject`, { note: 'Recount does not support this' })).data;
+    check('rejected request is closed', rejection?.status === 'REJECTED', rejection);
+    const unchangedMark = (await call(student, 'GET', '/marks')).data?.find((m) => m.id === ownMark.id);
+    check('rejected correction leaves the mark at 44', Number(unchangedMark?.marksObtained) === 44, unchangedMark);
     const identity = (await expect('admin requests a name correction (Tier 4)', admin, 'PATCH', `/students/${newStudent.id}`, {
       firstName: 'Ravindra', reason: 'Spelling per birth certificate', documentFileId: fileId,
     })).data;
@@ -309,7 +372,12 @@ async function main() {
     await expect('raised by School Admin counts as the admin slot', admin, 'POST', `/approval-requests/${identity.approvalRequest.id}/approve`, {}, 409);
     const history = (await expect('approval history', admin, 'GET', `/approval-requests/${identity.approvalRequest.id}/history`)).data;
     check('history has the request event', history?.events?.some((e) => e.action === 'approval.requested'), history?.events);
-    await expect('cancel the name change', admin, 'POST', `/approval-requests/${identity.approvalRequest.id}/cancel`, {});
+    const nameApproval = (await expect('Principal approves the name change', principal, 'POST', `/approval-requests/${identity.approvalRequest.id}/approve`, {})).data;
+    check('name change approved', nameApproval?.status === 'APPROVED', nameApproval);
+    const renamed = (await expect('read renamed student', admin, 'GET', `/students/${newStudent.id}`)).data;
+    check('name change is applied after both approvals', renamed?.firstName === 'Ravindra', renamed?.firstName);
+    const finalHistory = (await expect('final approval history', principal, 'GET', `/approval-requests/${identity.approvalRequest.id}/history`)).data;
+    check('history has the approval event', finalHistory?.events?.some((e) => e.action === 'approval.approved'), finalHistory?.events);
   }
   await expect('student cannot approve requests', student, 'GET', '/approval-requests', undefined, 403);
 
@@ -453,6 +521,35 @@ async function main() {
   await expect('admin templates', admin, 'POST', '/notification-templates', { code: `fee-reminder-${RUN}`, channel: 'SMS', body: 'Fee due on {{date}}' });
   await expect('delivery log', admin, 'GET', '/notification-deliveries');
 
+  heading('Notification delivery worker');
+  const parentMe = (await call(parent, 'GET', '/auth/me')).data.erpUser;
+  await expect('push template for test notifications', admin, 'POST', '/notification-templates', { code: 'test', channel: 'PUSH', body: 'School alert: {{body}}' }, [201, 409]);
+  await expect('send a notification to the parent', admin, 'POST', '/notifications/test', { userId: parentMe.id, title: `Worker ${RUN}`, body: `Delivery check ${RUN}` });
+  const parentNote = (await call(parent, 'GET', '/notifications')).data?.find((n) => n.title === `Worker ${RUN}`);
+  check('parent has the in-app notification', parentNote, parentNote);
+  const parentRows = parentNote ? await settleDeliveries(admin, parentNote.id) : [];
+  const byChannel = Object.fromEntries(parentRows.map((row) => [row.channel, row]));
+  check('in-app, push and SMS rows, no email row', byChannel.IN_APP && byChannel.PUSH && byChannel.SMS && !byChannel.EMAIL, parentRows.map((r) => r.channel));
+  check('push sent to the registered device by the dev sender', byChannel.PUSH?.status === 'SENT' && byChannel.PUSH.provider === 'console' && byChannel.PUSH.recipient === 'android' && byChannel.PUSH.attempts === 1, byChannel.PUSH);
+  check('push delivery has sent time and message id', byChannel.PUSH?.sentAt && byChannel.PUSH.providerMessageId === `console-${byChannel.PUSH.id}`, byChannel.PUSH);
+  check('SMS reached a final state', ['SENT', 'SKIPPED'].includes(byChannel.SMS?.status), byChannel.SMS);
+  await expect('sent delivery cannot be retried', admin, 'POST', `/notification-deliveries/${byChannel.PUSH?.id}/retry`, {}, 409);
+
+  await expect('student enables push only', student, 'PATCH', '/notification-preferences', { push: true, sms: false, email: false });
+  await expect('send a notification to the student', admin, 'POST', '/notifications/test', { userId: studentMe.id, title: `No device ${RUN}`, body: 'Nothing to push to' });
+  const studentNote = (await call(student, 'GET', '/notifications')).data?.find((n) => n.title === `No device ${RUN}`);
+  const studentRows = studentNote ? await settleDeliveries(admin, studentNote.id) : [];
+  const studentPush = studentRows.find((row) => row.channel === 'PUSH');
+  check('push without a device is skipped, not failed', studentPush?.status === 'SKIPPED' && /no registered devices/i.test(studentPush.error), studentPush);
+  const retried = (await expect('admin retries the skipped delivery', admin, 'POST', `/notification-deliveries/${studentPush?.id}/retry`, {})).data;
+  check('retry re-queues with a fresh attempt count', retried?.status === 'QUEUED' && retried.attempts === 0, retried);
+  const afterRetry = (await settleDeliveries(admin, studentNote?.id)).find((row) => row.channel === 'PUSH');
+  check('retried delivery is processed again', afterRetry?.status === 'SKIPPED' && afterRetry.attempts === 1, afterRetry);
+  const skipped = (await expect('filter deliveries by status', admin, 'GET', '/notification-deliveries?status=SKIPPED&channel=PUSH')).data;
+  check('status filter returns only skipped push rows', skipped?.length && skipped.every((row) => row.status === 'SKIPPED' && row.channel === 'PUSH'), skipped?.length);
+  await expect('teacher cannot run the delivery worker', teacher, 'POST', '/notification-deliveries/process', {}, 403);
+  await expect('bad status filter is a 400', admin, 'GET', '/notification-deliveries?status=LOST', undefined, 400);
+
   heading('Dashboards, reports, analytics');
   await expect('principal dashboard', admin, 'GET', '/dashboards/principal');
   const tdash = (await expect('teacher dashboard', teacher, 'GET', '/dashboards/teacher')).data;
@@ -460,6 +557,7 @@ async function main() {
   const pdash = (await expect('parent dashboard', parent, 'GET', '/dashboards/parent')).data;
   check('parent dashboard shows the child', pdash?.children?.[0]?.student?.id === studentId, pdash);
   await expect('accountant dashboard (admin)', admin, 'GET', '/dashboards/accountant');
+  await expect('principal opens principal dashboard', principal, 'GET', '/dashboards/principal');
   await expect('student cannot open principal dashboard', student, 'GET', '/dashboards/principal', undefined, 403);
   for (const path of [
     `/reports/attendance-summary?from=${day(-30)}&to=${day(0)}`,

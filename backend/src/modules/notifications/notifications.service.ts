@@ -4,9 +4,11 @@ import { DatabaseService } from '../../common/database/database.service';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import { AccessService } from '../../common/access/access.service';
 import { NotifyService } from '../../common/notify/notify.service';
+import { DeliveryWorker } from '../../common/notify/delivery-worker.service';
 import { pageArgs, paged } from '../../common/http/pagination';
 import {
   CreateTemplateDto,
+  DeliveryQueryDto,
   NotificationQueryDto,
   RegisterDeviceDto,
   TestNotificationDto,
@@ -20,6 +22,7 @@ export class NotificationsService {
     private readonly database: DatabaseService,
     private readonly access: AccessService,
     private readonly notify: NotifyService,
+    private readonly worker: DeliveryWorker,
   ) {}
 
   async findMine(authUser: SupabaseUser, query: NotificationQueryDto) {
@@ -129,10 +132,13 @@ export class NotificationsService {
     return this.database.notificationTemplate.update({ where: { id: templateId }, data: input });
   }
 
-  async deliveries(authUser: SupabaseUser, query: NotificationQueryDto) {
+  async deliveries(authUser: SupabaseUser, query: DeliveryQueryDto) {
     const context = await this.access.schoolContext(authUser);
     const where: Prisma.NotificationDeliveryWhereInput = {
       notification: { schoolId: context.schoolId },
+      status: query.status,
+      channel: query.channel,
+      notificationId: query.notificationId,
     };
     const [items, total] = await this.database.$transaction([
       this.database.notificationDelivery.findMany({
@@ -144,6 +150,28 @@ export class NotificationsService {
       this.database.notificationDelivery.count({ where }),
     ]);
     return paged(items, total, query);
+  }
+
+  /** Puts a FAILED or SKIPPED delivery back in the queue with a fresh attempt budget. */
+  async retryDelivery(authUser: SupabaseUser, deliveryId: string) {
+    const context = await this.access.schoolContext(authUser);
+    const delivery = await this.database.notificationDelivery.findFirst({
+      where: { id: deliveryId, notification: { schoolId: context.schoolId } },
+    });
+    if (!delivery) throw new NotFoundException('Delivery not found');
+    if (delivery.status !== 'FAILED' && delivery.status !== 'SKIPPED') {
+      throw new ConflictException(`A ${delivery.status.toLowerCase()} delivery cannot be retried`);
+    }
+    return this.database.notificationDelivery.update({
+      where: { id: deliveryId },
+      data: { status: 'QUEUED', attempts: 0, nextAttemptAt: new Date(), error: null, lockedAt: null },
+    });
+  }
+
+  /** Runs one worker batch for this school now instead of waiting for the next poll. */
+  async processDeliveries(authUser: SupabaseUser) {
+    const context = await this.access.schoolContext(authUser);
+    return this.worker.processBatch(100, context.schoolId);
   }
 
   async test(authUser: SupabaseUser, input: TestNotificationDto) {

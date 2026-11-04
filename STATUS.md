@@ -1,7 +1,7 @@
 # School ERP Project Status
 
 Single source of truth for what is built, what is partial, and what is known
-to be missing. Last updated 2026-10-23.
+to be missing. Last updated 2026-11-04.
 
 Related documents:
 
@@ -14,10 +14,10 @@ Related documents:
 ## 1. Architecture
 
 ```text
-Web/Mobile (not started - planned Next.js + React Native/Expo)
+Web (apps/web, React + Vite) and Mobile (apps/mobile, React Native + Expo)
   -> NestJS 11 REST API (backend/src, prefix /api/v1, ~350 routes)
   -> Prisma 6 (DatabaseService extends PrismaClient)
-  -> Supabase PostgreSQL (8 migrations, ~70 tables)
+  -> Supabase PostgreSQL (10 migrations, ~70 tables)
   -> Supabase Auth (identity) + Supabase Storage (private files, bucket erp-files)
 ```
 
@@ -39,14 +39,16 @@ Shared services in `src/common`:
 
 | Area | Status |
 |---|---|
-| Prisma schema and migrations | Current (8 migrations) |
+| Prisma schema and migrations | Current (10 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 277/277 checks passing (`npm run test:e2e`) |
+| End-to-end suite | 335/335 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
+| Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
-| Approval workflows | Tier 3 and Tier 4 implemented |
-| Redis / BullMQ | Not used; delivery rows are queued in PostgreSQL |
-| Frontend / mobile | Not started |
+| Approval workflows | Tier 3 and Tier 4 implemented and covered end to end (School Admin + Principal) |
+| Redis / BullMQ | Not used; delivery rows are queued in PostgreSQL and sent by `DeliveryWorker` |
+| Push / SMS / email providers | **Not verified.** FCM, Twilio and Resend senders are written but have never sent a real message; only the dev console sender is tested |
+| Frontend / mobile | Attendance MVP built (see [apps/README.md](./apps/README.md)). Web tested in Chrome on the real API. Phone app installs and runs on Android; its real-data flows still need a manual check. Dashboard takes about 6 s with `connection_limit=1` and about 2 s with 5 |
 
 ## 3. Modules
 
@@ -71,7 +73,7 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 | Leave | Done | Student leave marks ON_LEAVE; staff leave checks balance and opens substitute requests |
 | Timetable and substitutes | Done | Rule-based conflict engine, draft generator, available-teacher ranking |
 | Feedback and complaints | Done | Leader-only routing, anonymity, SLA auto-escalation, repeated-complaint alert |
-| Notifications | Done | Inbox, preferences, devices, templates, delivery log |
+| Notifications | Done | Inbox, preferences, devices, templates, delivery log; delivery worker with FCM/Twilio/Resend senders, retries with backoff, retry/process admin routes. FCM (push), Twilio (SMS) and Resend (email) are **not verified** against the real services |
 | Files and certificates | Done | Private storage with signed URLs; certificates are immutable once issued and re-issued as new versions |
 | Dashboards, reports, analytics | Done | Principal/teacher/parent/accountant dashboards; rule-based attendance risk |
 | Transport, library, assets | Done | NFC boarding events, late-return fines, asset history |
@@ -79,19 +81,23 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 
 ## 4. Known gaps
 
-- Principal approval of Tier 4 requests is not covered by the e2e suite (no Principal test account).
 - MFA and OTP need a real authenticator or inbox and are untested.
 - Razorpay orders use local dev ids unless `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` are set; webhooks require `RAZORPAY_WEBHOOK_SECRET` / `CASHFREE_WEBHOOK_SECRET`.
-- Push, SMS, email and WhatsApp delivery: rows are queued, no sender worker or provider yet.
+- **FCM and Twilio are not verified.** The FCM (push) and Twilio (SMS) senders, and the Resend (email) sender, are implemented but have never been run against the real services because there are no credentials yet. The e2e suite only covers the console dev sender. Before relying on them, set `FCM_*`, `TWILIO_*` and `RESEND_API_KEY`/`EMAIL_FROM`, send a test with `POST /notifications/test`, and confirm a SENT row with the provider's message id in `/notification-deliveries`. WhatsApp is not implemented.
 - Reports run synchronously with row limits; no background job queue.
-- Row-Level Security for direct Supabase Data API access is not enabled.
 - `DIRECT_URL` points at the IPv6-only direct host; on IPv4-only networks use the session pooler URL for migrations.
-- Physical NFC readers are untested; NFC capture UI does not exist.
+- Physical NFC cards and readers are untested. `POST /attendance/nfc-scan` is covered end to end by typed card IDs, but no real card has been read, and the phone used so far (Realme RMX3521) has no NFC.
 
 ## 5. Next steps
 
-1. Create a Principal test account and extend the e2e suite to Tier 4 approvals.
-2. Notification delivery worker (FCM, SMS gateway) with a queue.
-3. Row-Level Security policies.
-4. Frontend (Next.js) and mobile (Expo) against this API.
-5. CI pipeline running build, lint, and the e2e suite against a staging project.
+1. Test the phone app by hand on real data, try real cards on an NFC phone, and host the backend for the school demo.
+2. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+
+Done 2026-10-28: Principal test account (`npm run prisma:bootstrap-test-accounts -- --only=principal`)
+and e2e coverage of Tier 4 approval, rejection, and applied changes.
+
+Done 2026-10-28: notification delivery worker (migration `20261028120000_notification_delivery_worker`).
+
+Done 2026-10-29: Row-Level Security (migration `20261029100000_enable_row_level_security`).
+Before it, all 68 tables were readable and writable with the public anon key through the
+Supabase Data API; that is now refused for anon and signed-in user tokens.

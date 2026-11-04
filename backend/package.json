@@ -18,6 +18,8 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:bootstrap-admin": "ts-node scripts/bootstrap-admin.ts",
     "prisma:bootstrap-test-accounts": "ts-node scripts/bootstrap-test-accounts.ts",
+    "prisma:seed-demo": "ts-node scripts/seed-demo-school.ts",
+    "db:check-rls": "ts-node scripts/check-rls.ts",
     "test:e2e": "node test/e2e/erp-flow.e2e.mjs"
   },
   "dependencies": {

@@ -29,6 +29,7 @@ import {
 } from './dto/account.dto';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
+import { AccessService } from '../access/access.service';
 
 @Controller('auth')
 export class AuthController {
@@ -37,6 +38,7 @@ export class AuthController {
     private readonly supabaseAuth: SupabaseAuthService,
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
+    private readonly access: AccessService,
   ) {}
 
   @Post('register')
@@ -103,6 +105,29 @@ export class AuthController {
     return {
       supabaseUser,
       erpUser,
+    };
+  }
+
+  /** Who the caller is in the ERP, so clients can choose which screens to show. */
+  @Get('context')
+  async context(@CurrentUser() user: SupabaseUser) {
+    const context = await this.access.context(user);
+    const school = context.schoolId
+      ? await this.database.school.findUnique({
+          where: { id: context.schoolId },
+          select: { id: true, name: true },
+        })
+      : null;
+    return {
+      userId: context.userId,
+      email: context.email,
+      displayName: context.displayName,
+      roles: context.roles,
+      permissions: [...context.permissions],
+      school,
+      staffId: context.staffId,
+      studentId: context.studentId,
+      guardianId: context.guardianId,
     };
   }
 
