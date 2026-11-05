@@ -1,9 +1,12 @@
 # School ERP — Role Scenarios and Permissions
 
-What each role can do in the backend as of 2026-10-23 (`/api/v1`), based on the
+What each role can do in the backend as of 2026-11-05 (`/api/v1`), based on the
 seeded permissions in `backend/prisma/seed.ts` and the service code. Every
 scenario marked **Works** is exercised by the end-to-end suite
-(`npm run test:e2e`, 277 checks passing).
+(`npm run test:e2e`, 343 checks passing).
+
+This document covers the API only. For which features have a screen, and what is
+still to do for each role, see [feature-status-by-role.md](./feature-status-by-role.md).
 
 - **Works** — implemented and covered by the e2e suite
 - **Untested** — implemented but needs a real device, inbox, or account to verify
@@ -68,7 +71,7 @@ flowchart TD
 flowchart TD
   A[User makes a change] --> T{Sensitivity tier}
   T -- Tier 1 --> T1[Applied now, audited<br/>e.g. parent edits child phone]
-  T -- Tier 2 --> T2[Applied with a reason, audited<br/>e.g. same-day attendance fix]
+  T -- Tier 2 --> T2[Applied with a reason, audited<br/>e.g. attendance fix within 48 hours]
   T -- Tier 3 --> T3[Approval request] --> L3{School Admin or<br/>Principal approves?}
   T -- Tier 4 --> D4{Supporting document<br/>attached?}
   D4 -- no --> X[400]
@@ -83,8 +86,11 @@ flowchart TD
 |---|---|
 | Parent contact details, own profile | 1 |
 | Attendance edit within 48 hours (reason required) | 2 |
-| Attendance older than 48 hours, section transfer, fee structure, discount, refund, bonafide/study certificate | 3 |
+| Attendance older than 48 hours, marks after submission and before release, section transfer, fee structure, discount, refund, bonafide/study certificate | 3 |
 | Student name, date of birth, admission number; marks after release; re-opening released results; transfer certificate | 4 |
+
+A section transfer is raised by a School Admin or Principal and applies straight away.
+Teachers raise only attendance and mark corrections.
 
 ## 4. Permission matrix (seeded)
 
@@ -94,12 +100,12 @@ R = read, M = manage, * = limited to own / linked / assigned records.
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | Organizations | R M | | | | | | |
 | Schools and settings | R M | R M | R | | | | |
-| Users, roles, overrides | R M | R M | R | | | | |
+| Users, roles, overrides | R M | R M | | | | | |
 | Staff and assignments | | R M | R | R* | | | |
 | Classes, sections, subjects, years | | R M | R | R | | | |
 | Students | | R M | R | R + register* | R | R* | R* |
 | Guardians | | R M | R | R* | R | R* | R* |
-| Enrollments | | R M | R | R* | | R* | R* |
+| Enrollments | | R M | R + transfer | R* | | R* | R* |
 | Attendance | | R M | R | R M* | | R* | R* |
 | Homework | R M | R M | R M | R M* | | R* | R* + submit |
 | Announcements | R M | R M | R M | R (audience) | R | R (audience) | R (audience) |
@@ -107,10 +113,10 @@ R = read, M = manage, * = limited to own / linked / assigned records.
 | Fees and payments | | R M | R | | R M | R* + pay | R* + pay |
 | Student leave | | decide | decide | decide (class teacher) | | request | request |
 | Staff leave | | decide | decide | request | request | | |
-| Timetable and substitutes | | R M | R M | R (own) | | R (published) | R (published) |
+| Timetable and substitutes | | R M | R M | R (published) | | R (published) | R (published) |
 | Complaints | | manage | manage | | | submit / track | submit / track |
 | Certificates | | R M | R | | | issued R* | issued R* |
-| Approvals | R M | R M | R M | request | request | | |
+| Approvals | R M | R M | R M | attendance and mark corrections | request | | |
 | Audit and security logs | R | R | R | | | | |
 | Reports and analytics | R | R | R | | fee reports | | |
 | Transport | | R M | R | | | R* | R* |
@@ -120,12 +126,16 @@ R = read, M = manage, * = limited to own / linked / assigned records.
 
 Extra roles: **Librarian** (library manage), **Transport Staff** (transport manage),
 **Reception** (guardians and certificates manage, approval requests). Every role can
-read announcements, open its dashboard, upload files, send feedback, and manage its
-own notifications.
+read announcements, upload files, send feedback, and manage its own notifications.
+Staff, parents, and leaders also have dashboards; students do not.
 
 ---
 
 ## 5. Admin view
+
+The intended account hierarchy is in the
+[architecture doc](../school-erp-architecture.md) (section 2.4). Today a School Admin
+creates accounts, and a Principal cannot.
 
 ### 5.1 Super Admin — organization
 
@@ -158,9 +168,9 @@ flowchart TD
 | Classes, sections (archive when empty), subjects | Works |
 | Staff with login in one call; activate/deactivate (signs them out) | Works |
 | Section-level teacher assignments, class teacher flag, reassignment | Works |
-| Students: register, archive/restore, history, documents | Works |
+| Students: register, edit, assign NFC cards, archive/restore, history, documents | Works |
 | Guardians with parent logins; link and unlink children | Works |
-| Enrollment, promote, withdraw; transfer via Tier 3 | Works |
+| Enrollment, promote, withdraw, section transfer | Works |
 | Fee structures, assignment to a class, cash/cheque payments, receipts, discounts, refunds | Works |
 | Examinations: verify, lock, release; reopen via Tier 4 | Works |
 | Timetable generation with conflict checks; substitutes | Works |
@@ -178,18 +188,19 @@ flowchart TD
 | Read students, guardians, structure, attendance, staff | Works |
 | Homework and announcements management | Works |
 | Verify and release results | Works (as School Admin in tests) |
-| Second approval on Tier 4 requests | Untested (no Principal test account yet) |
+| Principal approval on Tier 4 requests, including rejection | Works |
 | Principal dashboard, reports, analytics, audit | Works |
 | Decide staff leave; manage timetable and substitutes | Works |
+| Create a School Admin | Not built |
 
 ### 5.4 Accountant
 
 | Scenario | Status |
 |---|---|
 | Fee structures (submit for approval), assign, record and verify payments, receipts | Works (as School Admin in tests) |
-| Request discounts and refunds (Tier 3) | Works |
-| Overdue list, fee reports, accountant dashboard | Works |
-| No access to marks, attendance, complaints | Works |
+| Request discounts and refunds (Tier 3) | Works (as School Admin in tests) |
+| Overdue list, fee reports, accountant dashboard | Works (as School Admin in tests) |
+| No access to marks, attendance, complaints | Untested (no Accountant login in the tests) |
 
 ---
 
@@ -242,6 +253,8 @@ stateDiagram-v2
 | Scenario | Status |
 |---|---|
 | Attendance only for assigned classes/sections; 48-hour rule; bulk; corrections | Works |
+| Attendance by NFC card ID; repeat taps, unknown cards, and other sections handled | Works (typed IDs; no real card tried) |
+| Card IDs match in any case; saved and scanned in uppercase | Works (students and attendance scans) |
 | Homework for assigned class + section + subject; grade and return | Works |
 | Marks entry and bulk entry for own students; submit; Tier 3/4 corrections | Works |
 | Register students; view (not edit) details of own students | Works |
@@ -275,6 +288,7 @@ flowchart TD
 | Pay online (order + verified webhook) | Works (dev order ids; real Razorpay needs keys) |
 | Request leave; file anonymous or named complaints | Works |
 | Library history, transport details, issued certificates | Works |
+| Student dashboard | Not built |
 
 ## 8. Parent view
 
@@ -293,7 +307,7 @@ flowchart TD
 |---|---|
 | Parent login linked to children | Works |
 | Sees only linked children and their guardians | Works |
-| Notifications: absence, homework, results, payments, boarding | Works (in-app); push/SMS queued, no sender yet |
+| Notifications: absence, homework, results, payments, boarding | Works (in-app); push and SMS senders built, not verified with real services |
 | Complaints never shown to the named teacher; submitter hidden from staff | Works |
 
 ---
@@ -314,8 +328,10 @@ flowchart LR
 
 | Gap | Effect |
 |---|---|
-| No Principal test account | Tier 4 second approval not covered by tests |
-| No notification sender | Push, SMS, email rows stay QUEUED |
-| No Row-Level Security | Direct Supabase Data API access is not restricted (the app does not use it) |
+| Approval tier is set by the caller | A School Admin or Principal can file a Tier 4 change as Tier 3 through `POST /approval-requests` and approve it alone |
+| Account hierarchy not built | A Principal cannot create a School Admin, and a School Admin can assign the Principal role |
+| Card ID required at registration | A student cannot be registered first and given a card later |
+| Push, SMS, and email not verified | Senders are written, but only the console sender has been tested |
+| Real NFC cards not tested | Scanning is covered with typed card IDs only |
+| No Accountant login in the tests | Accountant limits are set by permissions but not covered end to end |
 | Reports run synchronously | Very large exports may be slow |
-| Frontend and mobile apps | Not started |
