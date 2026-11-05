@@ -110,7 +110,7 @@ export class StudentsService implements OnModuleInit {
             userId: erpUser.id,
             schoolId: context.schoolId,
             admissionNo: input.admissionNo.trim(),
-            nfcId: input.nfcId.trim(),
+            nfcId: input.nfcId.trim().toUpperCase(),
             firstName: input.firstName.trim(),
             lastName: input.lastName?.trim() || null,
             dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
@@ -198,7 +198,7 @@ export class StudentsService implements OnModuleInit {
   ) {
     const context = await this.access.schoolContext(authUser);
     const existing = await this.access.assertStudentAccess(context, studentId);
-    if (!context.isLeader && !context.isTeacher) {
+    if (!context.isLeader) {
       throw new ForbiddenException('You cannot update student records');
     }
 
@@ -237,7 +237,7 @@ export class StudentsService implements OnModuleInit {
     }
 
     const directChanges = {
-      nfcId: input.nfcId?.trim(),
+      nfcId: input.nfcId?.trim().toUpperCase(),
       phone: input.phone === undefined ? undefined : input.phone.trim() || null,
       address: input.address === undefined ? undefined : input.address.trim() || null,
     };
@@ -351,7 +351,7 @@ export class StudentsService implements OnModuleInit {
 
   private async assertNfcFree(nfcId: string) {
     const staffWithNfc = await this.database.staffProfile.findUnique({
-      where: { nfcId: nfcId.trim() },
+      where: { nfcId: nfcId.trim().toUpperCase() },
       select: { id: true },
     });
     if (staffWithNfc) {

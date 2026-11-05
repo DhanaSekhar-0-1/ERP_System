@@ -95,7 +95,7 @@ export class StaffService {
             userId: user.id,
             schoolId: context.schoolId,
             employeeNo: input.employeeNo.trim(),
-            nfcId: input.nfcId.trim(),
+            nfcId: input.nfcId.trim().toUpperCase(),
             designation: input.designation?.trim() || null,
           },
           include: { user: { select: USER_SELECT } },
@@ -154,7 +154,7 @@ export class StaffService {
           where: { id: staffId },
           data: {
             employeeNo: input.employeeNo?.trim(),
-            nfcId: input.nfcId?.trim(),
+            nfcId: input.nfcId?.trim().toUpperCase(),
             designation: input.designation === undefined ? undefined : input.designation.trim() || null,
           },
         });
@@ -245,7 +245,7 @@ export class StaffService {
 
   private async assertNfcFree(nfcId: string) {
     const studentWithNfc = await this.database.student.findUnique({
-      where: { nfcId: nfcId.trim() },
+      where: { nfcId: nfcId.trim().toUpperCase() },
       select: { id: true },
     });
     if (studentWithNfc) {

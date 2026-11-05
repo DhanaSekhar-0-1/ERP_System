@@ -211,11 +211,21 @@ async function main() {
   const visible = (await call(teacher, 'GET', '/students')).data;
   check('teacher sees students in assigned classes', visible.some((s) => s.id === studentId), visible?.map((s) => s.firstName));
   await expect('student cannot see another student', student, 'GET', `/students/${newStudent.id}`, undefined, 403);
-  await expect('teacher transfer request (8-B to 8-A) needs approval', teacher, 'POST', `/enrollments/${enrollment2.id}/transfer`, { sectionId: secA.id, reason: 'Parent request' }, [201]);
-  const pendingTransfer = (await call(admin, 'GET', `/approval-requests?status=PENDING&type=enrollment.transfer`)).data;
-  const transferRequest = pendingTransfer.find((r) => r.entityId === enrollment2.id);
-  check('transfer request is pending', transferRequest, pendingTransfer);
-  await expect('admin approves the transfer', admin, 'POST', `/approval-requests/${transferRequest.id}/approve`, { note: 'OK' });
+  await expect('teacher cannot edit student contact details', teacher, 'PATCH', `/students/${studentId}`, { phone: '9000000000' }, 403);
+  await expect('teacher cannot change a student card', teacher, 'PATCH', `/students/${studentId}`, { nfcId: `NFC-BLOCKED-${RUN}` }, 403);
+  await expect('teacher cannot request a name change', teacher, 'PATCH', `/students/${studentId}`, { firstName: 'Changed', reason: 'Not allowed' }, 403);
+  await expect('teacher cannot request a transfer', teacher, 'POST', `/enrollments/${enrollment2.id}/transfer`, { sectionId: secA.id, reason: 'Parent request' }, 403);
+  await expect('teacher cannot raise a general approval request', teacher, 'POST', '/approval-requests', {
+    type: 'student.identity-change', entityType: 'student', entityId: studentId, reason: 'Not allowed', payload: { changes: { firstName: 'Changed' } }, tier: 3,
+  }, 403);
+  const teacherStudent = (await expect('teacher can still register a student', teacher, 'POST', '/students', {
+    admissionNo: `E2E-T-${RUN}`, nfcId: `nfc-e2e-t-${RUN}`, password: `Stud#${RUN}`, firstName: 'Asha', lastName: 'Rao', dateOfBirth: '2013-06-11',
+  }, [201])).data;
+  check('card ID typed in lowercase is saved in uppercase', teacherStudent?.nfcId === `NFC-E2E-T-${RUN}`, teacherStudent?.nfcId);
+  await expect('same card in a different case is a duplicate', admin, 'POST', '/students', {
+    admissionNo: `E2E-D-${RUN}`, nfcId: `NFC-E2E-T-${RUN}`, password: `Stud#${RUN}`, firstName: 'Dup', lastName: 'Card', dateOfBirth: '2013-06-11',
+  }, 409);
+  await expect('admin transfers the student (8-B to 8-A)', admin, 'POST', `/enrollments/${enrollment2.id}/transfer`, { sectionId: secA.id, reason: 'Parent request' }, [201]);
   const moved = (await call(admin, 'GET', `/enrollments/${enrollment2.id}`)).data;
   check('enrollment moved to section A', moved?.sectionId === secA.id, moved);
 
@@ -261,6 +271,8 @@ async function main() {
   check('card tap marks PRESENT with source NFC', scan?.result === 'marked' && scan.record.status === 'PRESENT' && scan.record.source === 'NFC', scan);
   const rescan = (await expect('second tap', teacher, 'POST', '/attendance/nfc-scan', { nfcId: `NFC-E2E-${RUN}`, attendanceDate: day(0) })).data;
   check('second tap keeps the saved record', rescan?.result === 'already_marked' && rescan.record.id === scan?.record.id, rescan);
+  const lowerScan = (await expect('tap with a lowercase card ID', teacher, 'POST', '/attendance/nfc-scan', { nfcId: `nfc-e2e-${RUN}`, attendanceDate: day(0) })).data;
+  check('lowercase tap finds the same student', lowerScan?.result === 'already_marked' && lowerScan.record.id === scan?.record.id, lowerScan);
   await expect('unknown card is a 404', teacher, 'POST', '/attendance/nfc-scan', { nfcId: 'NFC-NOT-ISSUED', attendanceDate: day(0) }, 404);
   const scannedSection = scan?.record.enrollment.section.id;
   await expect('card from another section is refused', teacher, 'POST', '/attendance/nfc-scan', { nfcId: `NFC-E2E-${RUN}`, attendanceDate: day(0), sectionId: scannedSection === secA.id ? secB.id : secA.id }, 400);

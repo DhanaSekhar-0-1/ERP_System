@@ -1,7 +1,7 @@
 # School ERP Project Status
 
 Single source of truth for what is built, what is partial, and what is known
-to be missing. Last updated 2026-11-04.
+to be missing. Last updated 2026-11-05.
 
 Related documents:
 
@@ -41,7 +41,7 @@ Shared services in `src/common`:
 |---|---|
 | Prisma schema and migrations | Current (10 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 335/335 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 343/343 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |

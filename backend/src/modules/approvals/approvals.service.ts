@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../common/database/database.service';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
@@ -63,6 +63,10 @@ export class ApprovalsService {
 
   async create(authUser: SupabaseUser, input: CreateApprovalRequestDto) {
     const context = await this.access.schoolContext(authUser);
+    // Teachers raise attendance and mark corrections through those modules, which check their assignment.
+    if (context.isTeacher && !context.isLeader) {
+      throw new ForbiddenException('Teachers cannot raise general approval requests');
+    }
     return this.engine.create(context, input);
   }
 

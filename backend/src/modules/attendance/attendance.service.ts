@@ -114,7 +114,7 @@ export class AttendanceService implements OnModuleInit {
   async nfcScan(authUser: SupabaseUser, input: NfcScanDto) {
     const context = await this.access.schoolContext(authUser);
     const student = await this.database.student.findFirst({
-      where: { schoolId: context.schoolId, nfcId: input.nfcId.trim(), isArchived: false },
+      where: { schoolId: context.schoolId, nfcId: input.nfcId.trim().toUpperCase(), isArchived: false },
     });
     if (!student) throw new NotFoundException('No student is linked to this card');
     const active = await this.database.enrollment.findFirst({

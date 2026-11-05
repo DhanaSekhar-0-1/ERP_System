@@ -97,7 +97,7 @@ R = read, M = manage, * = limited to own / linked / assigned records.
 | Users, roles, overrides | R M | R M | R | | | | |
 | Staff and assignments | | R M | R | R* | | | |
 | Classes, sections, subjects, years | | R M | R | R | | | |
-| Students | | R M | R | R M* | R | R* | R* |
+| Students | | R M | R | R + register* | R | R* | R* |
 | Guardians | | R M | R | R* | R | R* | R* |
 | Enrollments | | R M | R | R* | | R* | R* |
 | Attendance | | R M | R | R M* | | R* | R* |
@@ -170,22 +170,6 @@ flowchart TD
 | Audit log search, CSV export, entity history; security events | Works |
 | Dashboards, reports, analytics | Works |
 | Transport, library, assets | Works |
-
-Example: a teacher asks to move Ravi from 8-B to 8-A (Tier 3).
-
-```mermaid
-sequenceDiagram
-  participant T as Teacher
-  participant API as NestJS API
-  participant SA as School Admin
-  participant DB as PostgreSQL
-  T->>API: POST /enrollments/:id/transfer (sectionId, reason)
-  API->>DB: approval_requests (PENDING) + audit entry
-  API-->>SA: notification "Approval needed"
-  SA->>API: POST /approval-requests/:id/approve
-  API->>DB: decision + enrollment moved + audit (one transaction)
-  Note over T,DB: Ravi now appears in 8-A lists and attendance
-```
 
 ### 5.3 Principal — oversight and approvals
 
@@ -260,8 +244,8 @@ stateDiagram-v2
 | Attendance only for assigned classes/sections; 48-hour rule; bulk; corrections | Works |
 | Homework for assigned class + section + subject; grade and return | Works |
 | Marks entry and bulk entry for own students; submit; Tier 3/4 corrections | Works |
-| Register students; edit contact details of own students | Works |
-| Name or date of birth change goes to Tier 4 approval | Works |
+| Register students; view (not edit) details of own students | Works |
+| Cannot edit student details or request a name, date of birth, or section change | Works |
 | Decide leave for own class (class teacher) | Works |
 | Own timetable, substitute duties, pending work dashboard | Works |
 | Request own leave; balance checked against entitlements | Works |

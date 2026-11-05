@@ -74,7 +74,7 @@ against real services.
 | Attendance for assigned sections only: bulk entry, 48-hour edits, corrections | Lesson planning and syllabus tracking: not built |
 | Homework: create, publish, grade, return | OCR-assisted mark entry: not built |
 | Marks entry and bulk entry, submission, corrections | Own attendance (staff attendance): not built |
-| Registers students and edits contact details; name or date-of-birth changes go to Tier 4 | |
+| Registers students and views their details; cannot edit them or request changes | |
 | Decides student leave as class teacher; requests own leave with balance check | |
 | Own timetable, substitute duties, dashboard | |
 | Offline attendance and mark drafts with sync conflicts | |
