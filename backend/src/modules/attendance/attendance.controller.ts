@@ -19,6 +19,8 @@ import {
   BulkAttendanceDto,
   CorrectionRequestDto,
   CreateAttendanceDto,
+  MySectionsQueryDto,
+  NfcScanDto,
 } from './dto/create-attendance.dto';
 import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 import { AttendanceService } from './attendance.service';
@@ -37,6 +39,18 @@ export class AttendanceController {
   @RequirePermissions('attendance:manage')
   bulk(@CurrentUser() user: SupabaseUser, @Body() input: BulkAttendanceDto) {
     return this.attendance.bulk(user, input);
+  }
+
+  @Post('nfc-scan')
+  @RequirePermissions('attendance:manage')
+  nfcScan(@CurrentUser() user: SupabaseUser, @Body() input: NfcScanDto) {
+    return this.attendance.nfcScan(user, input);
+  }
+
+  @Get('my-sections')
+  @RequirePermissions('attendance:read')
+  mySections(@CurrentUser() user: SupabaseUser, @Query() query: MySectionsQueryDto) {
+    return this.attendance.mySections(user, query);
   }
 
   @Get()

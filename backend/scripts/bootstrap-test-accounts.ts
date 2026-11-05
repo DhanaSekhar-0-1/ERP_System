@@ -12,9 +12,12 @@ interface AccountOptions {
   adminEmail: string;
   teacherEmail: string;
   studentEmail: string;
+  principalEmail: string;
+  only?: string[];
   adminPassword?: string;
   teacherPassword?: string;
   studentPassword?: string;
+  principalPassword?: string;
 }
 
 const prisma = new PrismaClient();
@@ -39,9 +42,12 @@ function getOptions(): AccountOptions {
     adminEmail: requiredOption('admin-email', 'test.admin@erp.local'),
     teacherEmail: requiredOption('teacher-email', 'test.teacher@erp.local'),
     studentEmail: requiredOption('student-email', 'test.student@erp.local'),
+    principalEmail: requiredOption('principal-email', 'test.principal@erp.local'),
+    only: option('only')?.split(',').map((role) => role.trim().toLowerCase()),
     adminPassword: option('admin-password'),
     teacherPassword: option('teacher-password'),
     studentPassword: option('student-password'),
+    principalPassword: option('principal-password'),
   };
 }
 
@@ -153,7 +159,13 @@ async function main(): Promise<void> {
       role: 'Student',
       accountPassword: password(options.studentPassword),
     },
-  ];
+    {
+      email: options.principalEmail,
+      displayName: 'Test Principal',
+      role: 'Principal',
+      accountPassword: password(options.principalPassword),
+    },
+  ].filter((account) => !options.only || options.only.includes(account.role.toLowerCase()));
 
   const created = [];
   for (const account of accounts) {
@@ -194,6 +206,13 @@ async function main(): Promise<void> {
           nfcId: 'TEST-NFC-TEACHER-001',
         },
         update: { schoolId: school.id, employeeNo: 'TEST-TEACHER-001', nfcId: 'TEST-NFC-TEACHER-001' },
+      });
+    }
+    if (account.role === 'Principal') {
+      await prisma.staffProfile.upsert({
+        where: { userId: user.id },
+        create: { userId: user.id, schoolId: school.id, employeeNo: 'TEST-PRINCIPAL-001' },
+        update: { schoolId: school.id, employeeNo: 'TEST-PRINCIPAL-001' },
       });
     }
     if (account.role === 'Student') {

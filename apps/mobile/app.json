@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "School ERP",
+    "slug": "school-erp",
+    "scheme": "schoolerp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.schoolerp.attendance"
+    },
+    "android": {
+      "package": "com.schoolerp.attendance",
+      "permissions": ["android.permission.NFC"],
+      "adaptiveIcon": {
+        "backgroundColor": "#4F46E5",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      "./plugins/with-short-native-paths",
+      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }],
+      ["react-native-nfc-manager", { "nfcPermission": "Reads student ID cards to mark attendance" }]
+    ]
+  }
+}

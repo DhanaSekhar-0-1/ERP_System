@@ -234,7 +234,7 @@ export class TransportService {
       where: {
         schoolId: context.schoolId,
         isArchived: false,
-        ...(input.studentId ? { id: input.studentId } : { nfcId: input.nfcId?.trim() }),
+        ...(input.studentId ? { id: input.studentId } : { nfcId: input.nfcId?.trim().toUpperCase() }),
       },
     });
     if (!student) throw new NotFoundException('Student not found for this card');
@@ -245,7 +245,7 @@ export class TransportService {
         studentId: student.id,
         busId: input.busId ?? null,
         type: input.type,
-        nfcId: input.nfcId ?? null,
+        nfcId: input.nfcId?.trim().toUpperCase() ?? null,
         recordedById: context.userId,
       },
     });

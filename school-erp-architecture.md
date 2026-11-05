@@ -48,6 +48,23 @@ This two-layer model avoids two failure modes: a rigid system that can't match h
 
 Every module permission is expressed as a combination of: `View / Create / Edit / Delete / Approve / Reject / Publish / Export / Override / Lock-Unlock / Assign-Reassign`, scoped to `Own / Assigned / Class / School / Organization`. E.g., a Subject Teacher's "Edit Marks" permission is scoped to `Assigned Subject + Assigned Class`, not `School`.
 
+### 2.4 Who Creates Accounts
+
+Accounts follow a hierarchy within a school. A role can create only the roles listed for it in this table, never one at its own level or above.
+
+| Role | Can create | Access to student records |
+|---|---|---|
+| Principal | School Admin | View all in the school |
+| School Admin | Teacher, Student | Full |
+| Teacher | Student | View students in assigned classes and sections |
+| Student | Nobody | View own record only |
+
+This hierarchy decides who can create whom. It is separate from the data sensitivity tiers in Section 3, which decide who must approve a change.
+
+**Teachers and student data:** a Teacher can change student attendance for their assigned classes and sections, and marks for their assigned subjects in those classes. A Teacher can view a student's details but cannot edit them or request changes to them, including name, date of birth, contact details, NFC card, and class or section. Those changes belong to the School Admin.
+
+**Implementation status:** School Admin creating Teachers and Students, and Teachers registering Students, are built. Principal creating a School Admin is not built yet: a Principal cannot create accounts, and a School Admin can currently assign the Principal and School Admin roles.
+
 ---
 
 ## 3. Controlled Change Workflow (Data Sensitivity Tiers)
@@ -92,7 +109,7 @@ All tiers write to a single append-only **audit log** (Section 17); nothing is e
 
 | Module | Super Admin | School Admin | Principal | Class Teacher | Subject Teacher | Accountant | Parent | Student |
 |---|---|---|---|---|---|---|---|---|
-| Student Profile | Full | Full | View / Request Edit | View (class) | View (assigned) | View (fee-relevant fields only) | Own child, edit Tier 1 fields | Own, view-only |
+| Student Profile | Full | Full | View / Request Edit | View (class) / Register new | View (assigned) / Register new | View (fee-relevant fields only) | Own child, edit Tier 1 fields | Own, view-only |
 | Attendance | — | Full/Override | View / Override | Mark (own class) + Tier-2 edit | Mark (own periods) | — | View (own child) | View (own) |
 | Marks | — | Full/Verify/Release | Approve / Override / Release | View (class) | Enter (assigned subject) | — | View (own child, post-release) | View (own, post-release) |
 | Homework/Diary | — | View | View | Create/Edit (class) | Create/Edit (assigned subject) | — | View | View |

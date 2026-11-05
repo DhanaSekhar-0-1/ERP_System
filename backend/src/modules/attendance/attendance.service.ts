@@ -20,6 +20,8 @@ import {
   BulkAttendanceDto,
   CorrectionRequestDto,
   CreateAttendanceDto,
+  MySectionsQueryDto,
+  NfcScanDto,
 } from './dto/create-attendance.dto';
 import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 
@@ -106,6 +108,106 @@ export class AttendanceService implements OnModuleInit {
       }
       throw error;
     }
+  }
+
+  /** Marks the card's owner PRESENT. A repeated tap keeps the saved record unchanged. */
+  async nfcScan(authUser: SupabaseUser, input: NfcScanDto) {
+    const context = await this.access.schoolContext(authUser);
+    const student = await this.database.student.findFirst({
+      where: { schoolId: context.schoolId, nfcId: input.nfcId.trim().toUpperCase(), isArchived: false },
+    });
+    if (!student) throw new NotFoundException('No student is linked to this card');
+    const active = await this.database.enrollment.findFirst({
+      where: { studentId: student.id, status: 'ACTIVE', academicYear: { isActive: true } },
+    });
+    if (!active) throw new BadRequestException('This student has no active enrollment');
+    const enrollment = await this.access.assertEnrollmentManageable(context, active.id);
+    if (input.sectionId && enrollment.sectionId !== input.sectionId) {
+      throw new BadRequestException(`${student.firstName} belongs to a different section`);
+    }
+    const date = await this.assertValidDate(enrollment, input.attendanceDate);
+
+    const saved = () =>
+      this.database.attendanceRecord.findUnique({
+        where: { enrollmentId_attendanceDate: { enrollmentId: enrollment.id, attendanceDate: date } },
+        include: this.includeRelations(),
+      });
+    const existing = await saved();
+    if (existing) return { result: 'already_marked', record: existing };
+
+    try {
+      const record = await this.database.$transaction(async (transaction) => {
+        const created = await transaction.attendanceRecord.create({
+          data: {
+            schoolId: context.schoolId,
+            enrollmentId: enrollment.id,
+            attendanceDate: date,
+            status: 'PRESENT',
+            source: 'NFC',
+            markedById: context.userId,
+          },
+          include: this.includeRelations(),
+        });
+        await this.audit.record(
+          context,
+          {
+            action: 'attendance.marked',
+            entityType: 'attendance',
+            entityId: created.id,
+            newValue: { status: created.status, date: input.attendanceDate, source: 'NFC' },
+          },
+          transaction,
+        );
+        return created;
+      });
+      return { result: 'marked', record };
+    } catch (error) {
+      if (this.isUniqueError(error)) return { result: 'already_marked', record: await saved() };
+      throw error;
+    }
+  }
+
+  /** Sections the caller can mark in the active year, with progress for one date. */
+  async mySections(authUser: SupabaseUser, query: MySectionsQueryDto) {
+    const context = await this.access.schoolContext(authUser);
+    let scope: Prisma.SectionWhereInput = {};
+    if (!context.isLeader) {
+      const coverage = await this.access.teacherCoverage(context);
+      scope = {
+        OR: [{ id: { in: coverage.sectionIds } }, { classId: { in: coverage.classIds } }],
+      };
+    }
+    const date = new Date(query.attendanceDate.slice(0, 10));
+    const sections = await this.database.section.findMany({
+      where: {
+        schoolId: context.schoolId,
+        isArchived: false,
+        academicYear: { isActive: true },
+        ...scope,
+      },
+      orderBy: [{ class: { sortOrder: 'asc' } }, { name: 'asc' }],
+      include: {
+        class: { select: { id: true, name: true } },
+        enrollments: {
+          where: { status: 'ACTIVE' },
+          select: {
+            attendance: { where: { attendanceDate: date }, select: { status: true } },
+          },
+        },
+      },
+    });
+    return sections.map((section) => {
+      const records = section.enrollments.flatMap((enrollment) => enrollment.attendance);
+      const attended = records.filter((r) => r.status === 'PRESENT' || r.status === 'LATE').length;
+      return {
+        id: section.id,
+        name: section.name,
+        class: section.class,
+        students: section.enrollments.length,
+        marked: records.length,
+        attended,
+      };
+    });
   }
 
   async bulk(authUser: SupabaseUser, input: BulkAttendanceDto) {

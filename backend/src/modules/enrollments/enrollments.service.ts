@@ -199,6 +199,7 @@ export class EnrollmentsService implements OnModuleInit {
   /** Moves a student to another class or section in the same year (Tier 3). */
   async transfer(authUser: SupabaseUser, enrollmentId: string, input: TransferEnrollmentDto) {
     const context = await this.access.schoolContext(authUser);
+    this.access.assertLeader(context);
     const existing = await this.access.assertEnrollmentManageable(context, enrollmentId);
     if (existing.status !== 'ACTIVE') {
       throw new BadRequestException('Only active enrollments can be transferred');
@@ -220,10 +221,7 @@ export class EnrollmentsService implements OnModuleInit {
       payload: { classId, sectionId: input.sectionId },
       tier: 3,
     });
-    if (context.isLeader) {
-      return this.approvals.approve(context, approvalRequest.id, 'Applied by requester');
-    }
-    return approvalRequest;
+    return this.approvals.approve(context, approvalRequest.id, 'Applied by requester');
   }
 
   /** Closes this year's enrollment as PROMOTED and opens the next one. */

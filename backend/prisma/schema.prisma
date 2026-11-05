@@ -161,8 +161,10 @@ enum CertificateStatus {
 
 enum DeliveryStatus {
   QUEUED
+  SENDING
   SENT
   FAILED
+  SKIPPED
 }
 
 enum BoardingType {
@@ -206,14 +208,14 @@ model Organization {
 }
 
 model School {
-  id                  String                @id @default(uuid()) @db.Uuid
-  organizationId      String                @map("organization_id") @db.Uuid
+  id                  String               @id @default(uuid()) @db.Uuid
+  organizationId      String               @map("organization_id") @db.Uuid
   name                String
   code                String
-  isArchived          Boolean               @default(false) @map("is_archived")
-  createdAt           DateTime              @default(now()) @map("created_at")
-  updatedAt           DateTime              @updatedAt @map("updated_at")
-  organization        Organization          @relation(fields: [organizationId], references: [id])
+  isArchived          Boolean              @default(false) @map("is_archived")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  organization        Organization         @relation(fields: [organizationId], references: [id])
   academicYears       AcademicYear[]
   users               User[]
   classes             SchoolClass[]
@@ -273,25 +275,25 @@ model SchoolSettings {
 }
 
 model AcademicYear {
-  id               String             @id @default(uuid()) @db.Uuid
-  schoolId         String             @map("school_id") @db.Uuid
-  name             String
-  startsOn         DateTime           @map("starts_on") @db.Date
-  endsOn           DateTime           @map("ends_on") @db.Date
-  isActive         Boolean            @default(false) @map("is_active")
-  isClosed         Boolean            @default(false) @map("is_closed")
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
-  school           School             @relation(fields: [schoolId], references: [id])
-  sections         Section[]
-  subjects         Subject[]
-  classes          SchoolClass[]
-  enrollments      Enrollment[]
-  assignments      StaffAssignment[]
-  homework         Homework[]
-  examinations     Examination[]
-  feeStructures    FeeStructure[]
-  timetables       Timetable[]
+  id                String             @id @default(uuid()) @db.Uuid
+  schoolId          String             @map("school_id") @db.Uuid
+  name              String
+  startsOn          DateTime           @map("starts_on") @db.Date
+  endsOn            DateTime           @map("ends_on") @db.Date
+  isActive          Boolean            @default(false) @map("is_active")
+  isClosed          Boolean            @default(false) @map("is_closed")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  school            School             @relation(fields: [schoolId], references: [id])
+  sections          Section[]
+  subjects          Subject[]
+  classes           SchoolClass[]
+  enrollments       Enrollment[]
+  assignments       StaffAssignment[]
+  homework          Homework[]
+  examinations      Examination[]
+  feeStructures     FeeStructure[]
+  timetables        Timetable[]
   leaveEntitlements LeaveEntitlement[]
 
   @@unique([schoolId, name])
@@ -300,32 +302,32 @@ model AcademicYear {
 }
 
 model User {
-  id                  String               @id @default(uuid()) @db.Uuid
-  organizationId      String?              @map("organization_id") @db.Uuid
-  schoolId            String?              @map("school_id") @db.Uuid
-  authUserId          String               @unique @map("auth_user_id") @db.Uuid
-  email               String               @unique
-  displayName         String               @map("display_name")
-  phone               String?
-  status              UserStatus           @default(INVITED)
-  createdAt           DateTime             @default(now()) @map("created_at")
-  updatedAt           DateTime             @updatedAt @map("updated_at")
-  organization        Organization?        @relation(fields: [organizationId], references: [id])
-  school              School?              @relation(fields: [schoolId], references: [id])
-  staffProfile        StaffProfile?
-  studentProfile      Student?
-  guardian            Guardian?
-  roles               UserRole[]
-  auditLogs           AuditLog[]
-  approvals           ApprovalRequest[]    @relation("ApprovalRequester")
-  approvalDecisions   ApprovalDecision[]
-  attendanceMarked    AttendanceRecord[]   @relation("AttendanceMarker")
-  announcements       Announcement[]
-  permissionOverrides PermissionOverride[]
-  sessions            UserSession[]
-  notifications       Notification[]
+  id                     String                  @id @default(uuid()) @db.Uuid
+  organizationId         String?                 @map("organization_id") @db.Uuid
+  schoolId               String?                 @map("school_id") @db.Uuid
+  authUserId             String                  @unique @map("auth_user_id") @db.Uuid
+  email                  String                  @unique
+  displayName            String                  @map("display_name")
+  phone                  String?
+  status                 UserStatus              @default(INVITED)
+  createdAt              DateTime                @default(now()) @map("created_at")
+  updatedAt              DateTime                @updatedAt @map("updated_at")
+  organization           Organization?           @relation(fields: [organizationId], references: [id])
+  school                 School?                 @relation(fields: [schoolId], references: [id])
+  staffProfile           StaffProfile?
+  studentProfile         Student?
+  guardian               Guardian?
+  roles                  UserRole[]
+  auditLogs              AuditLog[]
+  approvals              ApprovalRequest[]       @relation("ApprovalRequester")
+  approvalDecisions      ApprovalDecision[]
+  attendanceMarked       AttendanceRecord[]      @relation("AttendanceMarker")
+  announcements          Announcement[]
+  permissionOverrides    PermissionOverride[]
+  sessions               UserSession[]
+  notifications          Notification[]
   notificationPreference NotificationPreference?
-  devices             Device[]
+  devices                Device[]
 
   @@index([organizationId, schoolId])
   @@map("users")
@@ -478,31 +480,31 @@ model Subject {
 }
 
 model Student {
-  id                  String                @id @default(uuid()) @db.Uuid
-  schoolId            String                @map("school_id") @db.Uuid
-  userId              String?               @unique @map("user_id") @db.Uuid
-  admissionNo         String                @map("admission_no")
-  nfcId               String?               @unique @map("nfc_id")
-  firstName           String                @map("first_name")
-  lastName            String?               @map("last_name")
-  dateOfBirth         DateTime?             @map("date_of_birth") @db.Date
-  phone               String?
-  address             String?
-  isArchived          Boolean               @default(false) @map("is_archived")
-  createdAt           DateTime              @default(now()) @map("created_at")
-  updatedAt           DateTime              @default(now()) @updatedAt @map("updated_at")
-  school              School                @relation(fields: [schoolId], references: [id])
-  user                User?                 @relation(fields: [userId], references: [id])
-  guardians           StudentGuardian[]
-  enrollments         Enrollment[]
-  homeworkSubmissions HomeworkSubmission[]
-  marks               Mark[]
-  fees                StudentFee[]
-  leaves              StudentLeave[]
-  certificates        Certificate[]
+  id                   String                @id @default(uuid()) @db.Uuid
+  schoolId             String                @map("school_id") @db.Uuid
+  userId               String?               @unique @map("user_id") @db.Uuid
+  admissionNo          String                @map("admission_no")
+  nfcId                String?               @unique @map("nfc_id")
+  firstName            String                @map("first_name")
+  lastName             String?               @map("last_name")
+  dateOfBirth          DateTime?             @map("date_of_birth") @db.Date
+  phone                String?
+  address              String?
+  isArchived           Boolean               @default(false) @map("is_archived")
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @default(now()) @updatedAt @map("updated_at")
+  school               School                @relation(fields: [schoolId], references: [id])
+  user                 User?                 @relation(fields: [userId], references: [id])
+  guardians            StudentGuardian[]
+  enrollments          Enrollment[]
+  homeworkSubmissions  HomeworkSubmission[]
+  marks                Mark[]
+  fees                 StudentFee[]
+  leaves               StudentLeave[]
+  certificates         Certificate[]
   transportAllocations TransportAllocation[]
-  boardingEvents      BoardingEvent[]
-  libraryIssues       LibraryIssue[]
+  boardingEvents       BoardingEvent[]
+  libraryIssues        LibraryIssue[]
 
   @@unique([schoolId, admissionNo])
   @@index([schoolId])
@@ -540,25 +542,25 @@ model StudentGuardian {
 }
 
 model StaffProfile {
-  id                  String              @id @default(uuid()) @db.Uuid
-  userId              String              @unique @map("user_id") @db.Uuid
-  schoolId            String              @map("school_id") @db.Uuid
-  employeeNo          String              @map("employee_no")
-  nfcId               String?             @unique @map("nfc_id")
-  designation         String?
-  createdAt           DateTime            @default(now()) @map("created_at")
-  updatedAt           DateTime            @default(now()) @updatedAt @map("updated_at")
-  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  school              School              @relation(fields: [schoolId], references: [id])
-  staffAssignments    StaffAssignment[]
-  homework            Homework[]
-  timetableSlots      TimetableSlot[]
-  leaves              StaffLeave[]
-  leaveEntitlements   LeaveEntitlement[]
-  substituteOriginal  SubstituteRequest[] @relation("SubstituteOriginal")
-  substituteAssigned  SubstituteRequest[] @relation("SubstituteAssigned")
-  libraryIssues       LibraryIssue[]
-  assets              Asset[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  userId             String              @unique @map("user_id") @db.Uuid
+  schoolId           String              @map("school_id") @db.Uuid
+  employeeNo         String              @map("employee_no")
+  nfcId              String?             @unique @map("nfc_id")
+  designation        String?
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at")
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school             School              @relation(fields: [schoolId], references: [id])
+  staffAssignments   StaffAssignment[]
+  homework           Homework[]
+  timetableSlots     TimetableSlot[]
+  leaves             StaffLeave[]
+  leaveEntitlements  LeaveEntitlement[]
+  substituteOriginal SubstituteRequest[] @relation("SubstituteOriginal")
+  substituteAssigned SubstituteRequest[] @relation("SubstituteAssigned")
+  libraryIssues      LibraryIssue[]
+  assets             Asset[]
 
   @@unique([schoolId, employeeNo])
   @@map("staff_profiles")
@@ -762,24 +764,24 @@ model SecurityEvent {
 }
 
 model ApprovalRequest {
-  id            String             @id @default(uuid()) @db.Uuid
-  schoolId      String             @map("school_id") @db.Uuid
-  requesterId   String             @map("requester_id") @db.Uuid
-  type          String             @default("generic")
-  entityType    String             @map("entity_type")
-  entityId      String             @map("entity_id")
-  reason        String
-  payload       Json?
-  tier          Int                @default(3)
-  requiredRoles String[]           @default([]) @map("required_roles")
-  documentFileId String?           @map("document_file_id") @db.Uuid
-  status        ApprovalStatus     @default(PENDING)
-  resolvedAt    DateTime?          @map("resolved_at")
-  createdAt     DateTime           @default(now()) @map("created_at")
-  updatedAt     DateTime           @updatedAt @map("updated_at")
-  school        School             @relation(fields: [schoolId], references: [id])
-  requester     User               @relation("ApprovalRequester", fields: [requesterId], references: [id])
-  decisions     ApprovalDecision[]
+  id             String             @id @default(uuid()) @db.Uuid
+  schoolId       String             @map("school_id") @db.Uuid
+  requesterId    String             @map("requester_id") @db.Uuid
+  type           String             @default("generic")
+  entityType     String             @map("entity_type")
+  entityId       String             @map("entity_id")
+  reason         String
+  payload        Json?
+  tier           Int                @default(3)
+  requiredRoles  String[]           @default([]) @map("required_roles")
+  documentFileId String?            @map("document_file_id") @db.Uuid
+  status         ApprovalStatus     @default(PENDING)
+  resolvedAt     DateTime?          @map("resolved_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  school         School             @relation(fields: [schoolId], references: [id])
+  requester      User               @relation("ApprovalRequester", fields: [requesterId], references: [id])
+  decisions      ApprovalDecision[]
 
   @@index([schoolId, status])
   @@index([entityType, entityId])
@@ -1096,25 +1098,25 @@ model Feedback {
 }
 
 model Complaint {
-  id            String            @id @default(uuid()) @db.Uuid
-  schoolId      String            @map("school_id") @db.Uuid
-  submittedById String?           @map("submitted_by_id") @db.Uuid
-  isAnonymous   Boolean           @default(false) @map("is_anonymous")
-  category      String
-  subject       String
-  description   String
-  aboutStaffId  String?           @map("about_staff_id") @db.Uuid
-  studentId     String?           @map("student_id") @db.Uuid
-  evidenceFileIds String[]        @default([]) @map("evidence_file_ids")
-  status        ComplaintStatus   @default(SUBMITTED)
-  assignedToId  String?           @map("assigned_to_id") @db.Uuid
-  resolution    String?
-  slaDueAt      DateTime          @map("sla_due_at")
-  escalatedAt   DateTime?         @map("escalated_at")
-  createdAt     DateTime          @default(now()) @map("created_at")
-  updatedAt     DateTime          @updatedAt @map("updated_at")
-  school        School            @relation(fields: [schoolId], references: [id])
-  actions       ComplaintAction[]
+  id              String            @id @default(uuid()) @db.Uuid
+  schoolId        String            @map("school_id") @db.Uuid
+  submittedById   String?           @map("submitted_by_id") @db.Uuid
+  isAnonymous     Boolean           @default(false) @map("is_anonymous")
+  category        String
+  subject         String
+  description     String
+  aboutStaffId    String?           @map("about_staff_id") @db.Uuid
+  studentId       String?           @map("student_id") @db.Uuid
+  evidenceFileIds String[]          @default([]) @map("evidence_file_ids")
+  status          ComplaintStatus   @default(SUBMITTED)
+  assignedToId    String?           @map("assigned_to_id") @db.Uuid
+  resolution      String?
+  slaDueAt        DateTime          @map("sla_due_at")
+  escalatedAt     DateTime?         @map("escalated_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  school          School            @relation(fields: [schoolId], references: [id])
+  actions         ComplaintAction[]
 
   @@index([schoolId, status])
   @@index([schoolId, aboutStaffId])
@@ -1152,30 +1154,38 @@ model Notification {
 }
 
 model NotificationDelivery {
-  id             String         @id @default(uuid()) @db.Uuid
-  notificationId String         @map("notification_id") @db.Uuid
-  channel        String
-  status         DeliveryStatus @default(QUEUED)
-  error          String?
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
-  notification   Notification   @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  id                String         @id @default(uuid()) @db.Uuid
+  notificationId    String         @map("notification_id") @db.Uuid
+  channel           String
+  status            DeliveryStatus @default(QUEUED)
+  error             String?
+  attempts          Int            @default(0)
+  nextAttemptAt     DateTime       @default(now()) @map("next_attempt_at")
+  lockedAt          DateTime?      @map("locked_at")
+  sentAt            DateTime?      @map("sent_at")
+  provider          String?
+  providerMessageId String?        @map("provider_message_id")
+  recipient         String?
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  notification      Notification   @relation(fields: [notificationId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
+  @@index([status, nextAttemptAt])
   @@map("notification_deliveries")
 }
 
 model NotificationPreference {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @unique @map("user_id") @db.Uuid
-  inApp     Boolean  @default(true) @map("in_app")
-  push      Boolean  @default(true)
-  sms       Boolean  @default(false)
-  email     Boolean  @default(false)
-  digest    Boolean  @default(false)
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @unique @map("user_id") @db.Uuid
+  inApp      Boolean  @default(true) @map("in_app")
+  push       Boolean  @default(true)
+  sms        Boolean  @default(false)
+  email      Boolean  @default(false)
+  digest     Boolean  @default(false)
   mutedTypes String[] @default([]) @map("muted_types")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
 }
@@ -1465,19 +1475,19 @@ model SyncBatch {
 }
 
 model SyncConflict {
-  id             String         @id @default(uuid()) @db.Uuid
-  schoolId       String         @map("school_id") @db.Uuid
-  batchId        String         @map("batch_id") @db.Uuid
-  entityType     String         @map("entity_type")
-  entityId       String?        @map("entity_id")
-  clientPayload  Json           @map("client_payload")
-  serverPayload  Json?          @map("server_payload")
-  status         ConflictStatus @default(OPEN)
-  resolution     String?
-  resolvedById   String?        @map("resolved_by_id") @db.Uuid
-  resolvedAt     DateTime?      @map("resolved_at")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  batch          SyncBatch      @relation(fields: [batchId], references: [id])
+  id            String         @id @default(uuid()) @db.Uuid
+  schoolId      String         @map("school_id") @db.Uuid
+  batchId       String         @map("batch_id") @db.Uuid
+  entityType    String         @map("entity_type")
+  entityId      String?        @map("entity_id")
+  clientPayload Json           @map("client_payload")
+  serverPayload Json?          @map("server_payload")
+  status        ConflictStatus @default(OPEN)
+  resolution    String?
+  resolvedById  String?        @map("resolved_by_id") @db.Uuid
+  resolvedAt    DateTime?      @map("resolved_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  batch         SyncBatch      @relation(fields: [batchId], references: [id])
 
   @@index([schoolId, status])
   @@map("sync_conflicts")
