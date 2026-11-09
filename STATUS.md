@@ -17,7 +17,7 @@ Related documents:
 Web (apps/web, React + Vite) and Mobile (apps/mobile, React Native + Expo)
   -> NestJS 11 REST API (backend/src, prefix /api/v1, ~350 routes)
   -> Prisma 6 (DatabaseService extends PrismaClient)
-  -> Supabase PostgreSQL (12 migrations, ~70 tables)
+  -> Supabase PostgreSQL (13 migrations, ~70 tables)
   -> Supabase Auth (identity) + Supabase Storage (private files, bucket erp-files)
 ```
 
@@ -39,16 +39,16 @@ Shared services in `src/common`:
 
 | Area | Status |
 |---|---|
-| Prisma schema and migrations | Current (12 migrations) |
+| Prisma schema and migrations | Current (13 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 427/427 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 460/460 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
 | Approval workflows | Tier 3 and Tier 4 implemented and covered end to end (School Admin + Principal) |
 | Redis / BullMQ | Not used; delivery rows are queued in PostgreSQL and sent by `DeliveryWorker` |
 | Push / SMS / email providers | **Not verified.** FCM, Twilio and Resend senders are written but have never sent a real message; only the dev console sender is tested |
-| Frontend / mobile | Attendance MVP built (see [apps/README.md](./apps/README.md)). Web tested in Chrome on the real API. Phone app installs and runs on Android; its real-data flows still need a manual check. Dashboard takes about 6 s with `connection_limit=1` and about 2 s with 5 |
+| Frontend / mobile | Web: leader pages (Overview, Classes & Sections, Teacher Assignments, Exams & Reports, Teachers, Students, Attendance, Approvals, Settings) and a teacher area (My classes, Attendance, Marks entry, Slip tests), checked in the browser on the real API. Mobile: teacher Attendance, Subjects with marks entry, Leave, Notices; student and parent Attendance, Results, Leave, Notices; installs on Android, flows not yet checked on a device. Role-by-role status: [docs/feature-status-by-role.md](./docs/feature-status-by-role.md) |
 
 ## 3. Modules
 
@@ -68,7 +68,7 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 | Attendance | Done | Daily attendance is marked by the section's class teacher or school leadership; subject teachers can view it. ON_LEAVE status, bulk, 48-hour Tier 2 edits, Tier 3 corrections, summary, CSV export |
 | Homework | Done | Section-aware assignment check, grading, return, late flag, archive |
 | Announcements | Done | Audience targeting applied on read; publish notifies the audience |
-| Examinations and marks | Done | Exam types FA1-FA4 (minor), Q1 Quarterly, Q2 Half-yearly, Q3 Annual (major), Pre-public (Class 10 only), slip tests, and Other. Teachers submit marks, the School Admin approves, and the Principal's final approval releases results. Teachers create slip tests for their own sections, and the School Admin's approval releases them. Tier 3/4 corrections, report cards |
+| Examinations and marks | Done | Exam types FA1-FA4 (minor), Q1 Quarterly, Q2 Half-yearly, Q3 Annual (major), Pre-public (Class 10 only), slip tests, and Other. Teachers submit marks; each section is approved by the School Admin once its marks are complete and released by the Principal, independently of other sections (bulk approve-ready and release-approved too). Released marks and report cards show to that section's students, parents and teachers at once; the exam is marked released when every section is. Teachers create slip tests for their own sections, and the School Admin's approval releases them. Tier 3/4 corrections, report cards |
 | Fees and payments | Done | Structure approval, discounts and refunds (Tier 3), receipts, gateway orders, signed idempotent webhooks |
 | Leave | Done | Student leave marks ON_LEAVE; staff leave checks balance and opens substitute requests |
 | Timetable and substitutes | Done | Rule-based conflict engine, draft generator, available-teacher ranking |
@@ -90,8 +90,15 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 
 ## 5. Next steps
 
-1. Test the phone app by hand on real data, try real cards on an NFC phone, and host the backend for the school demo.
-2. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+1. Change the test passwords that are readable in the repository history.
+2. Fix the approval-tier gap (`POST /approval-requests` takes the tier from the caller) and build the account hierarchy (Principal creates School Admins and Accountants).
+3. School Admin screens for student registration, enrollment and academic years; then homework, fees and timetables.
+4. Test the phone app by hand on real data, try real cards on an NFC phone, and host the backend for the school demo.
+5. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+
+Done 2026-11-09: class, section, subject and teacher assignment management; per-section exam
+approval and release; multi-class exams; teacher web area; local sign-in checks and a short
+permission cache to cut per-request cost.
 
 Done 2026-10-28: Principal test account (`npm run prisma:bootstrap-test-accounts -- --only=principal`)
 and e2e coverage of Tier 4 approval, rejection, and applied changes.

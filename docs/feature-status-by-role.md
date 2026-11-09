@@ -1,158 +1,196 @@
 # Feature Status by Role
 
-What is done and what is not for each role, as of 2026-11-05.
+What is done, what is not, and what comes next for each role, as of 2026-11-09.
 See [STATUS.md](../STATUS.md) for platform status, [role-scenarios.md](./role-scenarios.md)
 for detailed flows, and [apps/README.md](../apps/README.md) to run the apps.
 
 ## How to read this
 
-Each feature has two statuses, because the API is far ahead of the apps:
+Each feature has two statuses, because the API is ahead of the apps:
 
-- **API:** the backend route exists.
+- **API:** the backend route exists and the server enforces who may use it.
 - **Screen:** a person can use the feature in an app.
 
 | Value | Meaning |
 |---|---|
-| Done | Built and tested end to end, or for screens, in the app |
-| Built, unverified | Built, but not tried with real data, hardware, or services |
+| Done | Built and tested end to end, or for screens, checked in the browser |
+| Built, unverified | Built and type-checked, but not tried with real data, hardware, or services |
 | Not built | Does not exist yet |
 
-Web screens were tested in Chrome on the real API. Phone screens install and run on
-Android, but their real-data flows have not been checked by hand, so they are all
+Web screens were checked in the browser on the real API. Phone screens install and run on
+Android, but their flows have not been checked by hand on a device, so they are all
 **Built, unverified**.
 
 ## Summary
 
 | Role | App | Screens today | Biggest gap |
 |---|---|---|---|
-| School Admin | Web | Overview, attendance, students, approvals | Most setup and daily work has an API but no screen |
-| Principal | Web | Overview, attendance, students, approvals | Cannot create a School Admin yet |
-| Teacher | Mobile | Classes, mark attendance, NFC scan, student leave, notices | No marks or homework screens |
-| Student | Mobile | Attendance, leave, notices | No homework, marks, or fees screens |
-| Parent | Mobile | Attendance, leave, notices | Only sees the first linked child |
+| Super Admin | Web | Every School Admin page | No student, fee, timetable or academic-year management |
+| School Admin | Web | Overview, Classes & Sections, Teacher Assignments, Exams & Reports, Teachers, Students, Attendance, Approvals, Settings | No screens for student registration, fees, timetables, leave or academic years |
+| Principal | Web | Same pages, read-only where they cannot change things; releases exam sections | Cannot create a School Admin |
+| Teacher | Web and mobile | My classes, Attendance (class teacher), Marks entry, Slip tests; mobile Attendance, Subjects, Leave, Notices | No homework screens; phone marks entry untested on a device |
+| Student | Mobile | Attendance, Results, Leave, Notices | No homework, fees or timetable screens |
+| Parent | Mobile | Attendance, Results, Leave, Notices | Sees only the first linked child |
 | Accountant | None | None | No screens at all |
-| Super Admin | Web | Same web pages as School Admin | Role scope still to be decided |
 
-Every API in [API's_modules.md](../API's_modules.md) is built, based on a comparison of
-the catalog against the controllers on 2026-10-29.
+Every API in [API's_modules.md](../API's_modules.md) is built, based on a comparison of the
+catalog against the controllers on 2026-10-29. Since then, class and subject management,
+teacher assignments, exam types, slip tests and per-section exam release were added.
 
 ---
 
-## School Admin
+## Super Admin
+
+The developer and organization account. Works across its organization for schools and
+users, and inside its own school for everything else. It has 43 permissions today.
 
 | Feature | API | Screen |
 |---|---|---|
-| School overview, attendance trend and risk | Done | Done (web) |
-| View attendance and export CSV | Done | Done (web) |
-| Student list and search | Done | Done (web) |
-| Assign an NFC card to a student | Done | Done (web) |
-| Approve or reject Tier 3 and Tier 4 requests | Done | Done (web) |
-| Academic years, classes, sections, subjects | Done | Not built |
-| Staff, teacher logins, section assignments | Done | Not built |
-| Register, edit, archive, restore students | Done | Not built |
-| Guardians, parent logins, enrollment, promotion, transfer | Done | Not built |
-| Mark or correct attendance | Done | Not built |
-| Exams, marks, verify, lock, release | Done | Not built |
-| Fee structures, payments, receipts, discounts, refunds | Done | Not built |
-| Timetables and substitutes | Done | Not built |
-| Student and staff leave decisions | Done | Not built |
-| Complaints, certificates, announcements | Done | Not built |
-| Transport, library, assets | Done | Not built |
-| Users, roles, permission overrides | Done | Not built |
-| Audit search, reports, analytics | Done | Not built |
-| MFA login | Built, unverified | Not built |
+| Organization and schools: create, edit settings, archive, restore | Done | Not built |
+| Users: create, invite, activate, deactivate; assign any role, including Super Admin | Done | Not built |
+| Roles, role permissions, per-user permission overrides | Done | Not built |
+| Classes, sections and per-section subjects; default subject list | Done | Done (web) |
+| Register teachers; subject teachers and class teachers | Done | Done (web) |
+| Exams: create for one or several classes, add subjects | Done | Done (web) |
+| Exam approval: approve sections and release them (both steps) | Done | Done (web) |
+| Approval requests, audit and security logs, reports, analytics | Done | Approvals only |
+| Students and attendance: read only | Done | Done (web) |
+| Homework and announcements | Done | Not built |
 
-**Not built or needs changing:**
+**Cannot do:** academic years, student registration or editing, parent logins, entering
+marks, fees, leave, timetables, complaints, certificates, library, transport, assets.
+
+**Things to know:**
+
+- It can give both exam approvals, so it can release results on its own.
+- It can give any user extra permissions, and no check stops it doing so for itself.
+- Nothing is deleted permanently: schools, users and students are archived or deactivated.
+
+**Next:** decide its final scope (full access, as first planned, with archiving instead of
+deleting and every action audited).
+
+## School Admin
+
+Runs the school day to day.
+
+| Feature | API | Screen |
+|---|---|---|
+| Overview: attendance today, weekly trend, students at risk | Done | Done (web) |
+| Classes and sections: create, rename, delete when empty; Section A and default subjects are added automatically | Done | Done (web) |
+| Per-section subjects: add, rename, remove, switch optional ones on and off | Done | Done (web) |
+| Default subject list for new sections (Sanskrit optional) | Done | Done (web) |
+| Register teachers with a login | Done | Done (web) |
+| One teacher per section subject; one class teacher per section | Done | Done (web) |
+| Exams: FA1-FA4, Q1-Q3, Pre-public (Class 10), Other; for several classes at once | Done | Done (web) |
+| Approve exam marks per section, or every ready section at once; send a section back | Done | Done (web) |
+| Approve and release slip tests | Done | Done (web) |
+| Student list and search; assign NFC cards | Done | Done (web) |
+| Attendance view and CSV export | Done | Done (web) |
+| Approve Tier 3 and Tier 4 change requests | Done | Done (web) |
+| Academic years, enrollment, promotion, transfers | Done | Not built |
+| Register and edit students; guardians and parent logins | Done | Not built |
+| Mark or correct attendance on the web | Done | Not built |
+| Fees, payments, receipts, discounts, refunds | Done | Not built |
+| Timetables, substitutes, student and staff leave | Done | Not built |
+| Complaints, certificates, announcements, homework | Done | Not built |
+| Transport, library, assets | Done | Not built |
+| Users, roles, overrides; audit search and reports | Done | Not built |
+
+**Problems:**
 
 - A School Admin can still assign the Principal and School Admin roles, which goes against
   the hierarchy in the [architecture doc](../school-erp-architecture.md) (section 2.4).
-- A School Admin can file a Tier 4 change as Tier 3 through `POST /approval-requests`
-  and approve it alone. See [Known problems](#known-problems).
-- Staff attendance, payroll, sports and events, and medical records with consent.
+- A School Admin can file a Tier 4 change as Tier 3 through `POST /approval-requests` and
+  approve it alone. See [Known problems](#known-problems).
+
+**Next:** student registration and enrollment screens, then academic years, fees and
+timetables.
 
 ## Principal
 
+Oversight and final approval.
+
 | Feature | API | Screen |
 |---|---|---|
-| School overview, attendance trend and risk | Done | Done (web) |
-| View attendance and export CSV | Done | Done (web) |
-| Student list and search (read-only) | Done | Done (web) |
-| Approve or reject Tier 3 and Tier 4 requests | Done | Done (web) |
-| Exams: create, verify, lock, release, reopen through Tier 4 | Done | Not built |
-| Timetables and substitutes | Done | Not built |
+| Overview, attendance, students | Done | Done (web) |
+| Classes, sections, subjects and teacher assignments: view | Done | Done (web, read-only) |
+| Exams: create, add classes and subjects | Done | Done (web) |
+| Release approved exam sections, one at a time or all approved at once; send back | Done | Done (web) |
+| Approve Tier 3 changes; give the Principal's approval on Tier 4 | Done | Done (web) |
 | Student and staff leave decisions | Done | Not built |
+| Timetables and substitutes | Done | Not built |
 | Complaints, announcements, homework | Done | Not built |
-| Read staff, fees, transport, library, and assets | Done | Not built |
 | Audit logs, reports, analytics | Done | Not built |
-| MFA login | Built, unverified | Not built |
 
-**Not built or needs changing:**
+**Not built:** creating a School Admin (the Principal cannot create accounts), and the
+teacher attendance summary, which needs staff attendance.
 
-- Creating a School Admin. A Principal cannot create any accounts today.
-- A Principal can also approve their own Tier 3 requests. See [Known problems](#known-problems).
-- The teacher attendance summary on the dashboard, which depends on staff attendance.
+**Next:** account creation for School Admins and Accountants, as the intended hierarchy says.
 
 ## Teacher
 
-Teachers can change attendance for their assigned classes and sections, and marks for
-their assigned subjects in those classes. They can view student details and register
-new students, but cannot edit details or request changes to them.
+Access comes from the teacher's current assignments, read on every request, so a change
+by the School Admin applies at once.
 
 | Feature | API | Screen |
 |---|---|---|
-| See assigned classes and marking progress | Done | Built, unverified (mobile) |
-| Mark attendance, and edit it within 48 hours with a reason | Done | Built, unverified (mobile) |
-| Mark attendance by NFC or typed card ID | Done | Built, unverified (mobile); no real card tried |
+| My classes: own subjects and class-teacher sections | Done | Done (web); Built, unverified (mobile) |
+| Daily attendance, only as class teacher of the section | Done | Done (web); Built, unverified (mobile) |
+| NFC or typed card attendance | Done | Built, unverified (mobile); no real card tried |
+| Marks entry for own subjects; save and submit | Done | Done (web); Built, unverified (mobile) |
+| Exams grouped as waiting, approved, or released | Done | Done (web) |
+| Create slip tests for own section and subject | Done | Done (web) |
 | Decide student leave as class teacher | Done | Built, unverified (mobile) |
 | Read notices | Done | Built, unverified (mobile) |
-| Request a correction for attendance older than 48 hours | Done | Not built |
-| Enter and submit marks, request mark corrections | Done | Not built |
+| Mark corrections after submission (Tier 3) or release (Tier 4) | Done | Not built |
 | Homework: create, publish, grade, return | Done | Not built |
-| Register a student | Done | Not built |
-| View assigned students | Done | Not built |
-| Own timetable, substitute duties, dashboard | Done | Not built |
-| Request own leave and check balance | Done | Not built |
-| Offline attendance and mark drafts | Done | Not built |
+| Register students; view assigned students | Done | Not built |
+| Own timetable, substitute duties, own leave | Done | Not built |
 
-**Not built:** lesson planning and syllabus tracking, OCR mark entry, and staff attendance.
+**Cannot do:** edit student details, change classes, sections, subjects or assignments, or
+mark attendance for a section where they are not the class teacher.
 
-**To decide:** teachers can still manage homework and decide student leave as class teacher.
+**Things to know:** a teacher sees students of their assigned classes from every academic
+year, not only the current one.
+
+**Next:** homework screens and mark correction requests.
 
 ## Student
 
 | Feature | API | Screen |
 |---|---|---|
 | Own attendance by month | Done | Built, unverified (mobile) |
+| Released results and report cards | Done | Built, unverified (mobile) |
 | Request leave | Done | Built, unverified (mobile) |
 | Read notices | Done | Built, unverified (mobile) |
-| View own profile | Done | Not built |
 | Homework: view and submit | Done | Not built |
-| Released marks and report cards | Done | Not built |
-| Fee summary | Done | Not built |
-| Online fee payment | Built, unverified (dev order IDs) | Not built |
-| Timetable | Done | Not built |
-| Complaints and feedback | Done | Not built |
-| Library history, transport details, issued certificates | Done | Not built |
-| Forgot password and OTP login | Built, unverified | Not built |
-| Push notifications | Built, unverified | Not built |
+| Fee summary; online payment | Done; payment Built, unverified | Not built |
+| Timetable, complaints, feedback | Done | Not built |
+| Library, transport, certificates | Done | Not built |
+| Forgot password, OTP login, push notifications | Built, unverified | Not built |
 
-**Not built:** a student dashboard API. The dashboards that exist are for staff, parents, and leaders.
+A student sees an exam's marks only after the Principal releases their section.
+
+**Not built:** a student dashboard.
+
+**Next:** homework and timetable screens.
 
 ## Parent
 
 | Feature | API | Screen |
 |---|---|---|
 | Child's attendance by month | Done | Built, unverified (mobile) |
+| Child's released results and report cards | Done | Built, unverified (mobile) |
 | Request leave for a child | Done | Built, unverified (mobile) |
 | Read notices | Done | Built, unverified (mobile) |
-| Linked children and parent dashboard | Done | Not built |
-| Edit own contact details (Tier 1) | Done | Not built |
-| Child's homework, results, fees, transport | Done | Not built |
-| Complaint tracking | Done | Not built |
+| Parent dashboard; edit own contact details | Done | Not built |
+| Child's homework, fees, transport; complaints | Done | Not built |
 | SMS alerts | Built, unverified | Not built |
 
-**Not built:** switching between children in the app (it shows only the first linked
-child), WhatsApp alerts, and live bus location.
+**Not built:** switching between children (the app shows only the first linked child),
+WhatsApp alerts, and live bus location.
+
+**Next:** a child switcher.
 
 ## Accountant
 
@@ -162,26 +200,13 @@ child), WhatsApp alerts, and live bus location.
 | Discount and refund requests (Tier 3) | Done | Not built |
 | Overdue list, fee reports, dashboard | Done | Not built |
 
-Accountants have no access to marks, attendance, or complaints.
+Accountants have no access to marks, attendance or complaints. The web portal sends them
+to the phone app, which has no fee screens.
 
-**Not built or needs changing:**
+**Not built:** any screen, payment reconciliation, and creation by the Principal (today a
+School Admin creates Accountants).
 
-- Any screen. The web portal sends Accountants to the mobile app, which has no fee screens.
-- Payment reconciliation with the gateway. Live gateway payments are also untested.
-- The Principal creating Accountants, which is the intended rule. Today a School Admin creates them.
-
-## Super Admin
-
-The scope of this role is still to be decided, so this reflects what exists today.
-
-| Feature | API | Screen |
-|---|---|---|
-| Organization and schools: create, archive, restore | Done | Not built |
-| Users, invitations, activation, roles, permission catalog | Done | Not built |
-| Audit and security logs | Done | Not built |
-
-Super Admin is limited to its own organization and has no seeded permissions for students,
-attendance, marks, or fees.
+**Next:** web fee screens.
 
 ---
 
@@ -189,11 +214,19 @@ attendance, marks, or fees.
 
 1. **Approval tiers can be bypassed.** `POST /approval-requests` lets the caller choose the
    tier, and the approval engine does not stop people approving their own requests. A School
-   Admin can file a Tier 4 change as Tier 3 and approve it alone. This route is closed for teachers.
+   Admin can file a Tier 4 change as Tier 3 and approve it alone. Closed for teachers only.
 2. **The account hierarchy is not built.** The Principal cannot create a School Admin, and a
    School Admin can assign the Principal role.
-3. **A card ID is required to register a student.** A student cannot be registered first and
-   given a card later.
+3. **A card ID is required to register a student.**
+4. **Older school-wide subjects** (created before subjects became per-section) do not appear
+   on the new screens. Assignments that use them still work, and they cover the section
+   subjects with the same code in exams.
+5. **Sections with no students** count as complete, so they must still be approved and
+   released before an exam shows as fully released.
+6. **Supabase-side sign-outs** take effect when the token expires (usually within an hour),
+   because tokens are now checked locally. Sign-outs through the app apply at once.
+7. **The permission cache is per server.** With several backend servers, a role change could
+   take up to a minute to reach the others.
 
 ## Features not built for any role
 
@@ -208,17 +241,18 @@ attendance, marks, or fees.
 
 ## Built but not verified
 
-- Push, SMS, and email (FCM, Twilio, Resend): no credentials yet.
+- Push, SMS and email (FCM, Twilio, Resend): no credentials yet.
 - MFA, OTP, forgot and reset password, and email verification.
 - Razorpay and Cashfree with real keys.
-- Real NFC cards and readers, and the phone scan screen.
-- Phone app flows on real data.
-- Daily digest notifications: the preference exists, but it is not confirmed that the
-  delivery worker honours it.
+- Real NFC cards and readers.
+- Phone app flows, including marks entry and Results, on a device.
 
-## Needed to go live
+## What comes next
 
-- Screens for the features marked **Not built** above.
-- Backend hosting for the school demo.
-- CI pipeline: build, lint, `db:check-rls`, and the e2e suite.
-- A background job queue for large reports, which run synchronously today.
+1. Change the passwords that are readable in the repository's history.
+2. Fix the approval-tier gap and build the account hierarchy.
+3. Student registration, enrollment and academic-year screens for the School Admin.
+4. Test the phone app on a device with real data and real NFC cards.
+5. Host the backend for the school demo.
+6. Homework, fees and timetable screens.
+7. CI running build, lint, `db:check-rls` and the e2e suite.

@@ -1,9 +1,9 @@
 # School ERP — Role Scenarios and Permissions
 
-What each role can do in the backend as of 2026-11-05 (`/api/v1`), based on the
+What each role can do in the backend as of 2026-11-09 (`/api/v1`), based on the
 seeded permissions in `backend/prisma/seed.ts` and the service code. Every
 scenario marked **Works** is exercised by the end-to-end suite
-(`npm run test:e2e`, 343 checks passing).
+(`npm run test:e2e`, 460 checks passing).
 
 This document covers the API only. For which features have a screen, and what is
 still to do for each role, see [feature-status-by-role.md](./feature-status-by-role.md).
@@ -101,15 +101,16 @@ R = read, M = manage, * = limited to own / linked / assigned records.
 | Organizations | R M | | | | | | |
 | Schools and settings | R M | R M | R | | | | |
 | Users, roles, overrides | R M | R M | | | | | |
-| Staff and assignments | | R M | R | R* | | | |
-| Classes, sections, subjects, years | | R M | R | R | | | |
-| Students | | R M | R | R + register* | R | R* | R* |
+| Staff and assignments | R M | R M | R | R* | | | |
+| Classes, sections, subjects | R M | R M | R | R | | | |
+| Academic years | R | R M | R | | | | |
+| Students | R | R M | R | R + register* | R | R* | R* |
 | Guardians | | R M | R | R* | R | R* | R* |
-| Enrollments | | R M | R + transfer | R* | | R* | R* |
-| Attendance | | R M | R | R M* | | R* | R* |
+| Enrollments | R | R M | R + transfer | R* | | R* | R* |
+| Attendance | R | R M | R | R; M as class teacher* | | R* | R* |
 | Homework | R M | R M | R M | R M* | | R* | R* + submit |
 | Announcements | R M | R M | R M | R (audience) | R | R (audience) | R (audience) |
-| Examinations and marks | | M, verify, release | M, verify, release | marks M* | | released R* | released R* |
+| Examinations and marks | M, approve and release sections | M, approve sections | M, release sections | marks M*, slip tests | | released R* | released R* |
 | Fees and payments | | R M | R | | R M | R* + pay | R* + pay |
 | Student leave | | decide | decide | decide (class teacher) | | request | request |
 | Staff leave | | decide | decide | request | request | | |
@@ -137,7 +138,7 @@ The intended account hierarchy is in the
 [architecture doc](../school-erp-architecture.md) (section 2.4). Today a School Admin
 creates accounts, and a Principal cannot.
 
-### 5.1 Super Admin — organization
+### 5.1 Super Admin — organization and school setup
 
 | Scenario | Status |
 |---|---|
@@ -145,14 +146,19 @@ creates accounts, and a Principal cannot.
 | Users, invitations, activation; roles and permission catalog | Works |
 | Limited to own organization | Works |
 | Archived school blocks its users | Works |
+| In its own school: register teachers, subject and class teachers | Works |
+| In its own school: classes, sections, per-section subjects, default subjects | Works |
+| In its own school: create exams; approve and release sections (both steps) | Works |
+| Academic years, students, fees, timetables, leave | Not allowed (no permission) |
 
 ### 5.2 School Admin — set up and run the year
 
 ```mermaid
 flowchart TD
-  A["POST /academic-years then /activate"] --> B["POST /classes, /sections, /subjects"]
-  B --> C["POST /staff with password<br/>creates login + Teacher role"]
-  C --> D["POST /staff/:id/assignments<br/>class, optional section, subject, class teacher"]
+  A["POST /academic-years then /activate"] --> B["POST /classes<br/>Section A and default subjects added"]
+  B --> B2["POST /sections (each gets default subjects);<br/>/academics/sections/:id/subjects to customise"]
+  B2 --> C["POST /staff with password<br/>creates login + Teacher role"]
+  C --> D["PUT /academics/subjects/:id/teacher<br/>PUT /academics/sections/:id/class-teacher"]
   D --> E["POST /students<br/>login ID generated"]
   E --> F["POST /guardians, link child,<br/>POST /guardians/:id/account (parent login)"]
   F --> G["POST /enrollments<br/>or /enrollments/:id/promote"]
@@ -165,14 +171,20 @@ flowchart TD
 | Scenario | Status |
 |---|---|
 | Academic year create, activate, summary, rollover (copy structure, optional promotion), close | Works |
-| Classes, sections (archive when empty), subjects | Works |
+| Classes get Section A automatically; sections get their own copy of the default subjects | Works |
+| Per-section subjects: add, rename, remove, switch optional ones (Sanskrit) on and off | Works |
+| Delete classes, sections and subjects only when nothing depends on them; a class keeps one section | Works |
 | Staff with login in one call; activate/deactivate (signs them out) | Works |
-| Section-level teacher assignments, class teacher flag, reassignment | Works |
+| One teacher per section subject; one class teacher per section (replacing the old one) | Works |
+| Removing an assignment or switching a subject off removes the teacher's access at once | Works |
 | Students: register, edit, assign NFC cards, archive/restore, history, documents | Works |
 | Guardians with parent logins; link and unlink children | Works |
 | Enrollment, promote, withdraw, section transfer | Works |
 | Fee structures, assignment to a class, cash/cheque payments, receipts, discounts, refunds | Works |
-| Examinations: verify, lock, release; reopen via Tier 4 | Works |
+| Exam types FA1-FA4, Q1-Q3, Pre-public (Class 10 only), Other; one exam for several classes | Works |
+| Approve each section's marks when complete, or every ready section at once; send back | Works |
+| Approve and release slip tests | Works |
+| Reopen a released exam via Tier 4 | Works |
 | Timetable generation with conflict checks; substitutes | Works |
 | Complaints: assign, investigate, resolve; SLA auto-escalation | Works |
 | Certificates: approve, generate, download | Works |
@@ -187,7 +199,7 @@ flowchart TD
 |---|---|
 | Read students, guardians, structure, attendance, staff | Works |
 | Homework and announcements management | Works |
-| Verify and release results | Works (as School Admin in tests) |
+| Release approved exam sections, one at a time or all at once; cannot give the first approval | Works |
 | Principal approval on Tier 4 requests, including rejection | Works |
 | Principal dashboard, reports, analytics, audit | Works |
 | Decide staff leave; manage timetable and substitutes | Works |
@@ -210,7 +222,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  A[Teacher logs in] --> B["GET /sections/:id/attendance<br/>only assigned sections"]
+  A[Teacher logs in] --> B["GET /attendance/my-sections<br/>only sections where they are class teacher"]
   B --> C["POST /attendance/bulk<br/>date + records"]
   C --> D{Date valid?}
   D -- future or outside year --> X[400]
@@ -239,24 +251,33 @@ stateDiagram-v2
 
 ### 6.3 Marks
 
+Each section of an exam moves through these states on its own, so a finished section does
+not wait for the others.
+
 ```mermaid
 stateDiagram-v2
-  [*] --> DRAFT: exam created, assessments added
-  DRAFT --> VERIFIED: verify (all marks entered and submitted)
-  VERIFIED --> DRAFT: reject
-  VERIFIED --> LOCKED: lock
-  LOCKED --> DRAFT: unlock
-  LOCKED --> RELEASED: release (families notified)
-  RELEASED --> DRAFT: re-release request (Tier 4 approved)
+  [*] --> DRAFT: exam created for one or more classes
+  DRAFT --> VERIFIED: School Admin approves the section (every mark submitted)
+  VERIFIED --> DRAFT: send back
+  VERIFIED --> RELEASED: Principal releases the section (its families notified)
+  RELEASED --> [*]: exam released when every section is
 ```
+
+Slip tests skip the Principal: the School Admin's approval releases them. Marks in an
+approved section are locked; changes go through a correction request (Tier 3 before
+release, Tier 4 after).
 
 | Scenario | Status |
 |---|---|
-| Attendance only for assigned classes/sections; 48-hour rule; bulk; corrections | Works |
+| Daily attendance only as class teacher of the section; 48-hour rule; bulk; corrections | Works |
+| Subject teachers can view their sections' attendance but not change it | Works |
 | Attendance by NFC card ID; repeat taps, unknown cards, and other sections handled | Works (typed IDs; no real card tried) |
 | Card IDs match in any case; saved and scanned in uppercase | Works (students and attendance scans) |
 | Homework for assigned class + section + subject; grade and return | Works |
-| Marks entry and bulk entry for own students; submit; Tier 3/4 corrections | Works |
+| Marks entry and bulk entry for own subject and sections; submit; Tier 3/4 corrections | Works |
+| Exam subjects listed as waiting, approved, or released; mark sheet per subject | Works |
+| Slip tests for own section and subject | Works |
+| Cannot change classes, sections, subjects or teacher assignments | Works |
 | Register students; view (not edit) details of own students | Works |
 | Cannot edit student details or request a name, date of birth, or section change | Works |
 | Decide leave for own class (class teacher) | Works |
@@ -284,7 +305,7 @@ flowchart TD
 |---|---|
 | See only own record, attendance, homework, marks, fees | Works |
 | Submit homework; graded work cannot be overwritten | Works |
-| Report card with grades after release | Works |
+| Marks and report card as soon as the student's own section is released | Works |
 | Pay online (order + verified webhook) | Works (dev order ids; real Razorpay needs keys) |
 | Request leave; file anonymous or named complaints | Works |
 | Library history, transport details, issued certificates | Works |
@@ -307,6 +328,7 @@ flowchart TD
 |---|---|
 | Parent login linked to children | Works |
 | Sees only linked children and their guardians | Works |
+| Child's marks and report card once the child's section is released | Works |
 | Notifications: absence, homework, results, payments, boarding | Works (in-app); push and SMS senders built, not verified with real services |
 | Complaints never shown to the named teacher; submitter hidden from staff | Works |
 
@@ -335,3 +357,6 @@ flowchart LR
 | Real NFC cards not tested | Scanning is covered with typed card IDs only |
 | No Accountant login in the tests | Accountant limits are set by permissions but not covered end to end |
 | Reports run synchronously | Very large exports may be slow |
+| Super Admin gives both exam approvals | It can approve and release results on its own |
+| Older school-wide subjects | Not shown on the new screens; assignments using them still work and cover same-code section subjects in exams |
+| Sections without students | Count as complete, so they still need approving and releasing before an exam shows as fully released |
