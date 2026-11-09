@@ -17,6 +17,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { DatabaseService } from '../database/database.service';
 import { currentRequest } from '../http/request-context';
+import { SupabaseUser } from './supabase-user.interface';
 
 const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
 const MAX_ACCOUNT_FAILURES = 5;
@@ -68,6 +69,38 @@ export class SupabaseAuthService implements OnModuleInit {
     }
 
     return data.user;
+  }
+
+  /**
+   * Verifies an access token without calling Supabase on every request. The project signs tokens
+   * with an asymmetric key, so the signature is checked here against Supabase's published public
+   * keys, which are fetched once and cached. Tokens signed with a shared secret fall back to
+   * asking Supabase. The issuer, audience and expiry are checked too.
+   */
+  async verifyAccessToken(accessToken: string): Promise<SupabaseUser> {
+    const { data, error } = await this.client.auth.getClaims(accessToken);
+    const claims = data?.claims;
+    if (error || !claims) {
+      throw new UnauthorizedException('Invalid or expired access token');
+    }
+    const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+    if (
+      claims.iss !== `${this.url}/auth/v1` ||
+      !audience.includes('authenticated') ||
+      typeof claims.sub !== 'string' ||
+      !claims.sub
+    ) {
+      throw new UnauthorizedException('Invalid or expired access token');
+    }
+    return {
+      id: claims.sub,
+      email: typeof claims.email === 'string' ? claims.email : undefined,
+      role: typeof claims.role === 'string' ? claims.role : undefined,
+      appMetadata: (claims.app_metadata as Record<string, unknown> | undefined) ?? {},
+      userMetadata: (claims.user_metadata as Record<string, unknown> | undefined) ?? {},
+      sessionId: typeof claims.session_id === 'string' ? claims.session_id : undefined,
+      accessToken,
+    };
   }
 
   /** Reads the session_id claim from an access token already verified by Supabase. */

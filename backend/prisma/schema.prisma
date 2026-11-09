@@ -474,6 +474,7 @@ model Section {
   timetables          Timetable[]
   subjects            Subject[]
   classTeacher        ClassTeacher?
+  examSections        ExamSection[]
 
   @@unique([classId, name])
   @@map("sections")
@@ -619,6 +620,28 @@ model StaffAssignment {
   @@index([schoolId, academicYearId, classId])
   @@index([schoolId, staffId])
   @@map("staff_assignments")
+}
+
+/// Approval of one exam for one section: the School Admin approves (VERIFIED) and the Principal
+/// releases (RELEASED), independently of the exam's other sections.
+model ExamSection {
+  id            String      @id @default(uuid()) @db.Uuid
+  schoolId      String      @map("school_id") @db.Uuid
+  examinationId String      @map("examination_id") @db.Uuid
+  sectionId     String      @map("section_id") @db.Uuid
+  status        ExamStatus  @default(DRAFT)
+  verifiedAt    DateTime?   @map("verified_at")
+  verifiedById  String?     @map("verified_by_id") @db.Uuid
+  releasedAt    DateTime?   @map("released_at")
+  releasedById  String?     @map("released_by_id") @db.Uuid
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at")
+  examination   Examination @relation(fields: [examinationId], references: [id], onDelete: Cascade)
+  section       Section     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([examinationId, sectionId])
+  @@index([schoolId, sectionId])
+  @@map("exam_sections")
 }
 
 /// One class teacher per section, kept apart from subject assignments so a class teacher does
@@ -853,26 +876,27 @@ model ApprovalDecision {
 }
 
 model Examination {
-  id             String       @id @default(uuid()) @db.Uuid
-  schoolId       String       @map("school_id") @db.Uuid
-  academicYearId String       @map("academic_year_id") @db.Uuid
+  id             String        @id @default(uuid()) @db.Uuid
+  schoolId       String        @map("school_id") @db.Uuid
+  academicYearId String        @map("academic_year_id") @db.Uuid
   name           String
-  type           ExamType     @default(OTHER)
+  type           ExamType      @default(OTHER)
   term           String?
-  startsOn       DateTime?    @map("starts_on") @db.Date
-  endsOn         DateTime?    @map("ends_on") @db.Date
-  status         ExamStatus   @default(DRAFT)
-  verifiedAt     DateTime?    @map("verified_at")
-  verifiedById   String?      @map("verified_by_id") @db.Uuid
-  lockedAt       DateTime?    @map("locked_at")
-  releasedAt     DateTime?    @map("released_at")
-  releasedById   String?      @map("released_by_id") @db.Uuid
-  createdById    String?      @map("created_by_id") @db.Uuid
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
-  school         School       @relation(fields: [schoolId], references: [id])
-  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  startsOn       DateTime?     @map("starts_on") @db.Date
+  endsOn         DateTime?     @map("ends_on") @db.Date
+  status         ExamStatus    @default(DRAFT)
+  verifiedAt     DateTime?     @map("verified_at")
+  verifiedById   String?       @map("verified_by_id") @db.Uuid
+  lockedAt       DateTime?     @map("locked_at")
+  releasedAt     DateTime?     @map("released_at")
+  releasedById   String?       @map("released_by_id") @db.Uuid
+  createdById    String?       @map("created_by_id") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  school         School        @relation(fields: [schoolId], references: [id])
+  academicYear   AcademicYear  @relation(fields: [academicYearId], references: [id])
   assessments    Assessment[]
+  sections       ExamSection[]
 
   @@unique([schoolId, academicYearId, name])
   @@map("examinations")
@@ -913,6 +937,8 @@ model Mark {
   status        MarkStatus @default(DRAFT)
   enteredById   String?    @map("entered_by_id") @db.Uuid
   submittedAt   DateTime?  @map("submitted_at")
+  /// Set when the mark's section (or the whole exam) is released; students and parents see only released marks.
+  releasedAt    DateTime?  @map("released_at")
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")
   assessment    Assessment @relation(fields: [assessmentId], references: [id])

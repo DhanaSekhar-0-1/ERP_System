@@ -312,6 +312,40 @@ export interface MyAssessment {
   students: number | null;
   entered: number;
   submitted: number;
+  /** DRAFT: waiting for marks; VERIFIED: admin approved; RELEASED: visible to families. */
+  status: ExamStatus;
+}
+
+export interface ExamSectionRow {
+  section: { id: string; name: string };
+  class: { id: string; name: string };
+  subjects: number;
+  students: number;
+  expected: number;
+  entered: number;
+  submitted: number;
+  missing: number;
+  complete: boolean;
+  status: ExamStatus;
+  verifiedAt: string | null;
+  releasedAt: string | null;
+}
+
+export interface ExamSectionProgress {
+  examinationId: string;
+  type: ExamType;
+  status: ExamStatus;
+  sections: ExamSectionRow[];
+}
+
+export interface ReportCard {
+  examination: { id: string; name: string; term: string | null };
+  subjects: { subject: { id: string; name: string }; maxMarks: number; marksObtained: number | null; isAbsent: boolean; percent: number; grade: string; passed: boolean }[];
+  total: number;
+  maxTotal: number;
+  percent: number;
+  grade: string;
+  result: string;
 }
 
 export interface MarkSheet {

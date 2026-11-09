@@ -13,6 +13,10 @@ export default function FamilyLayout() {
         options={{ title: 'Attendance', tabBarIcon: tabIcon('calendar') }}
       />
       <Tabs.Screen
+        name="results"
+        options={{ title: 'Results', tabBarIcon: tabIcon('ribbon') }}
+      />
+      <Tabs.Screen
         name="leave"
         options={{ title: 'Leave', tabBarIcon: tabIcon('document-text') }}
       />

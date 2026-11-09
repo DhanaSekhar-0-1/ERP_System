@@ -1,6 +1,7 @@
 import { AuthTokens, createApi } from '@erp/shared';
 
-const KEY = 'erp.session';
+export const SESSION_KEY = 'erp.session';
+const KEY = SESSION_KEY;
 
 /** Fires after the session ends so the auth provider can return to the login page. */
 export const signedOut = new EventTarget();

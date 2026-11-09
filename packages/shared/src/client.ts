@@ -13,6 +13,7 @@ import type {
   ClassCard,
   ClassDetail,
   DefaultSubject,
+  ExamSectionProgress,
   ExamType,
   MarkSheet,
   MyAssessment,
@@ -26,6 +27,7 @@ import type {
   NfcScanResult,
   Paged,
   PrincipalDashboard,
+  ReportCard,
   SchoolClass,
   Section,
   SectionSubject,
@@ -288,10 +290,19 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
       call<Examination>('POST', '/examinations', input),
     addAssessment: (examinationId: string, input: { classId: string; subjectId: string; maxMarks: number; passMarks?: number }) =>
       call<unknown>('POST', `/examinations/${examinationId}/assessments`, input),
+    examSections: (examinationId: string) =>
+      call<ExamSectionProgress>('GET', `/examinations/${examinationId}/sections`),
+    sectionAction: (examinationId: string, sectionId: string, action: 'verify' | 'release' | 'reject') =>
+      call<{ sectionId: string; name: string; status: string; examReleased: boolean }>('POST', `/examinations/${examinationId}/sections/${sectionId}/${action}`, {}),
+    approveReadySections: (examinationId: string) =>
+      call<{ approved: { sectionId: string; name: string }[]; waiting: { name: string; status: string; missing: number }[] }>('POST', `/examinations/${examinationId}/sections/verify-ready`, {}),
+    releaseApprovedSections: (examinationId: string) =>
+      call<{ released: { sectionId: string; name: string }[]; waiting: { name: string; status: string; missing: number }[] }>('POST', `/examinations/${examinationId}/sections/release-approved`, {}),
+    reportCards: (studentId: string) => call<ReportCard[]>('GET', `/students/${studentId}/report-cards`),
     examVerification: (examinationId: string) =>
       call<ExamVerification>('GET', `/examinations/${examinationId}/verification`),
-    addClassSubjects: (examinationId: string, input: { classId: string; maxMarks: number; passMarks?: number }) =>
-      call<{ added: number; skipped: number }>('POST', `/examinations/${examinationId}/assessments/class`, input),
+    addClassSubjects: (examinationId: string, input: { classIds: string[]; maxMarks: number; passMarks?: number }) =>
+      call<{ added: number; skipped: number; classes: number }>('POST', `/examinations/${examinationId}/assessments/class`, input),
     examAction: (examinationId: string, action: 'verify' | 'reject' | 'release') =>
       call<Examination>('POST', `/examinations/${examinationId}/${action}`, {}),
   };

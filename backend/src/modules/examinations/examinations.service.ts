@@ -123,8 +123,9 @@ export class ExaminationsService implements OnModuleInit {
         });
         await transaction.mark.updateMany({
           where: { assessment: { examinationId: request.entityId } },
-          data: { status: 'DRAFT' },
+          data: { status: 'DRAFT', releasedAt: null },
         });
+        await transaction.examSection.deleteMany({ where: { examinationId: request.entityId } });
         await this.audit.record(
           approver,
           {
@@ -262,12 +263,12 @@ export class ExaminationsService implements OnModuleInit {
 
   async findMany(authUser: SupabaseUser, academicYearId?: string) {
     const context = await this.access.schoolContext(authUser);
-    const released = !context.isLeader && !context.isTeacher;
+    const family = !context.isLeader && !context.isTeacher;
     return this.database.examination.findMany({
       where: {
         schoolId: context.schoolId,
         ...(academicYearId ? { academicYearId } : {}),
-        ...(released ? { status: 'RELEASED' } : {}),
+        ...(family ? await this.releasedForFamily(context) : {}),
       },
       orderBy: [{ startsOn: 'desc' }, { createdAt: 'desc' }],
       include: { _count: { select: { assessments: true } } },
@@ -280,7 +281,7 @@ export class ExaminationsService implements OnModuleInit {
       where: {
         id: examinationId,
         schoolId: context.schoolId,
-        ...(!context.isLeader && !context.isTeacher ? { status: 'RELEASED' } : {}),
+        ...(!context.isLeader && !context.isTeacher ? await this.releasedForFamily(context) : {}),
       },
       include: {
         assessments: {
@@ -350,6 +351,17 @@ export class ExaminationsService implements OnModuleInit {
       if (!subject.isEnabled) throw new BadRequestException('This subject is switched off for its section');
       sectionId = section.id;
     }
+    const approved = await this.database.examSection.findFirst({
+      where: {
+        examinationId,
+        status: { not: 'DRAFT' },
+        section: sectionId ? { id: sectionId } : { classId: input.classId },
+      },
+      include: { section: { select: { name: true } } },
+    });
+    if (approved) {
+      throw new ConflictException(`Section ${approved.section.name} of this class is already approved; subjects cannot be added to it`);
+    }
     return this.database.assessment.create({
       data: {
         schoolId: context.schoolId,
@@ -375,8 +387,13 @@ export class ExaminationsService implements OnModuleInit {
     if (exam.type === 'SLIP_TEST') {
       throw new BadRequestException('Slip tests cover one subject');
     }
-    const schoolClass = await this.database.schoolClass.findFirst({
-      where: { id: input.classId, schoolId: context.schoolId, academicYearId: exam.academicYearId },
+    const classIds = [...new Set([...(input.classIds ?? []), ...(input.classId ? [input.classId] : [])])];
+    if (!classIds.length) throw new BadRequestException('Choose at least one class');
+    if (input.passMarks !== undefined && input.passMarks > input.maxMarks) {
+      throw new BadRequestException('Pass marks cannot exceed maximum marks');
+    }
+    const classes = await this.database.schoolClass.findMany({
+      where: { id: { in: classIds }, schoolId: context.schoolId, academicYearId: exam.academicYearId },
       include: {
         sections: {
           where: { isArchived: false },
@@ -384,28 +401,43 @@ export class ExaminationsService implements OnModuleInit {
         },
       },
     });
-    if (!schoolClass) throw new NotFoundException('Class not found in the examination year');
-    if (exam.type === 'PRE_PUBLIC' && !this.isClassTen(schoolClass)) {
-      throw new BadRequestException('Pre-public exams are only for Class 10');
+    if (classes.length !== classIds.length) {
+      throw new NotFoundException('One or more classes were not found in the examination year');
     }
-    if (input.passMarks !== undefined && input.passMarks > input.maxMarks) {
-      throw new BadRequestException('Pass marks cannot exceed maximum marks');
+    if (exam.type === 'PRE_PUBLIC') {
+      const notTen = classes.filter((schoolClass) => !this.isClassTen(schoolClass));
+      if (notTen.length) {
+        throw new BadRequestException(`Pre-public exams are only for Class 10, not ${notTen.map((c) => c.name).join(', ')}`);
+      }
     }
-    const rows = schoolClass.sections.flatMap((section) =>
-      section.subjects.map((subject) => ({
-        schoolId: context.schoolId,
-        examinationId,
-        classId: schoolClass.id,
-        sectionId: section.id,
-        subjectId: subject.id,
-        maxMarks: input.maxMarks,
-        passMarks: input.passMarks ?? null,
-        examDate: input.examDate ? new Date(input.examDate) : null,
-      })),
+    // Sections already approved or released keep the subjects they were approved with.
+    const locked = new Set(
+      (
+        await this.database.examSection.findMany({
+          where: { examinationId, status: { not: 'DRAFT' } },
+          select: { sectionId: true },
+        })
+      ).map((row) => row.sectionId),
     );
-    if (!rows.length) throw new BadRequestException('This class has no subjects switched on');
+    const rows = classes.flatMap((schoolClass) =>
+      schoolClass.sections.filter((section) => !locked.has(section.id)).flatMap((section) =>
+        section.subjects.map((subject) => ({
+          schoolId: context.schoolId,
+          examinationId,
+          classId: schoolClass.id,
+          sectionId: section.id,
+          subjectId: subject.id,
+          maxMarks: input.maxMarks,
+          passMarks: input.passMarks ?? null,
+          examDate: input.examDate ? new Date(input.examDate) : null,
+        })),
+      ),
+    );
+    if (!rows.length) {
+      throw new BadRequestException(classes.length === 1 ? 'This class has no subjects switched on' : 'These classes have no subjects switched on');
+    }
     const created = await this.database.assessment.createMany({ data: rows, skipDuplicates: true });
-    return { added: created.count, skipped: rows.length - created.count };
+    return { added: created.count, skipped: rows.length - created.count, classes: classes.length };
   }
 
   /** Draft exam subjects in the teacher's own classes, sections and subjects. */
@@ -414,18 +446,19 @@ export class ExaminationsService implements OnModuleInit {
     if (!context.staffId) return [];
     const assignments = await this.database.staffAssignment.findMany({
       where: { staffId: context.staffId, academicYear: { isActive: true } },
+      include: { subject: { select: { code: true, sectionId: true } } },
     });
     if (!assignments.length) return [];
     const assessments = await this.database.assessment.findMany({
       where: {
         schoolId: context.schoolId,
-        examination: { status: 'DRAFT' },
+        examination: { academicYear: { isActive: true } },
         OR: assignments.map((assignment) => ({
-          classId: assignment.classId,
-          subjectId: assignment.subjectId,
-          ...(assignment.sectionId
-            ? { OR: [{ sectionId: assignment.sectionId }, { sectionId: null }] }
-            : {}),
+          AND: [
+            { classId: assignment.classId },
+            this.subjectMatch(assignment),
+            assignment.sectionId ? { OR: [{ sectionId: assignment.sectionId }, { sectionId: null }] } : {},
+          ],
         })),
       },
       orderBy: [{ createdAt: 'desc' }],
@@ -437,6 +470,12 @@ export class ExaminationsService implements OnModuleInit {
         marks: { select: { status: true, studentId: true } },
       },
     });
+    const approvals = await this.database.examSection.findMany({
+      where: { examinationId: { in: [...new Set(assessments.map((item) => item.examinationId))] } },
+      select: { examinationId: true, sectionId: true, status: true },
+    });
+    const approvalOf = (examinationId: string, sectionId: string | null | undefined) =>
+      sectionId ? approvals.find((row) => row.examinationId === examinationId && row.sectionId === sectionId)?.status : undefined;
     const result = [];
     for (const assessment of assessments) {
       const students = await this.manageableStudentIds(context, assessment);
@@ -453,6 +492,13 @@ export class ExaminationsService implements OnModuleInit {
         students: ids ? ids.size : null,
         entered: mine.length,
         submitted: mine.filter((mark) => mark.status === 'SUBMITTED').length,
+        // DRAFT: waiting for marks; VERIFIED: admin approved; RELEASED: visible to families.
+        status:
+          assessment.examination.status === 'DRAFT'
+            ? approvalOf(assessment.examinationId, assessment.sectionId ?? assignments.find((a) => a.classId === assessment.classId)?.sectionId) ?? 'DRAFT'
+            : assessment.examination.status === 'LOCKED'
+              ? 'VERIFIED'
+              : assessment.examination.status,
       });
     }
     return result;
@@ -526,6 +572,222 @@ export class ExaminationsService implements OnModuleInit {
     };
   }
 
+  /**
+   * Progress and approval of every section an exam covers. A section is complete when every
+   * student in it has a submitted mark for each of the exam's subjects in that section.
+   */
+  async sectionProgress(authUser: SupabaseUser, examinationId: string) {
+    const context = await this.leader(authUser);
+    const exam = await this.scopedExam(context, examinationId);
+    return { examinationId: exam.id, type: exam.type, status: exam.status, sections: await this.sectionRows(exam) };
+  }
+
+  /** Approve, release or send back one section of an exam. */
+  async sectionAction(authUser: SupabaseUser, examinationId: string, sectionId: string, action: 'verify' | 'release' | 'reject', note?: string) {
+    const context = await this.leader(authUser);
+    const exam = await this.scopedExam(context, examinationId);
+    const rows = await this.sectionRows(exam);
+    const row = rows.find((item) => item.section.id === sectionId);
+    if (!row) throw new NotFoundException('This exam does not cover that section');
+    return this.applySectionAction(context, exam, row, action, note);
+  }
+
+  /** The School Admin approves every complete section, or the Principal releases every approved one. */
+  async bulkSectionAction(authUser: SupabaseUser, examinationId: string, action: 'verify' | 'release') {
+    const context = await this.leader(authUser);
+    const exam = await this.scopedExam(context, examinationId);
+    this.assertSectionRole(context, exam, action);
+    const rows = await this.sectionRows(exam);
+    const ready = rows.filter((row) => (action === 'verify' ? row.status === 'DRAFT' && row.complete : row.status === 'VERIFIED'));
+    const done = [];
+    for (const row of ready) {
+      await this.applySectionAction(context, exam, row, action);
+      done.push({ sectionId: row.section.id, name: `${row.class.name}-${row.section.name}` });
+    }
+    const waiting = rows
+      .filter((row) => !ready.includes(row) && row.status !== 'RELEASED' && (action === 'release' || row.status === 'DRAFT'))
+      .map((row) => ({ sectionId: row.section.id, name: `${row.class.name}-${row.section.name}`, status: row.status, missing: row.missing }));
+    return { [action === 'verify' ? 'approved' : 'released']: done, waiting };
+  }
+
+  private assertSectionRole(context: SchoolContext, exam: Examination, action: 'verify' | 'release' | 'reject') {
+    const isAdmin = context.isSchoolAdmin || context.isSuperAdmin;
+    const slipTest = exam.type === 'SLIP_TEST';
+    if (action === 'verify' && !isAdmin) throw new ForbiddenException('The School Admin approves marks first');
+    if (action === 'release' && slipTest && !isAdmin) {
+      throw new ForbiddenException('The School Admin approves and releases slip tests');
+    }
+    if (action === 'release' && !slipTest && !context.isPrincipal && !context.isSuperAdmin) {
+      throw new ForbiddenException('Only the Principal gives final approval and releases results');
+    }
+    if (exam.status !== 'DRAFT') {
+      throw new ConflictException(`This exam is already ${exam.status.toLowerCase()} as a whole`);
+    }
+  }
+
+  private async applySectionAction(
+    context: SchoolContext,
+    exam: Examination,
+    row: Awaited<ReturnType<ExaminationsService['sectionRows']>>[number],
+    action: 'verify' | 'release' | 'reject',
+    note?: string,
+  ) {
+    this.assertSectionRole(context, exam, action);
+    const label = `${row.class.name}-${row.section.name}`;
+    if (action === 'verify') {
+      if (row.status !== 'DRAFT') throw new ConflictException(`${label} is already ${row.status.toLowerCase()}`);
+      if (!row.subjects) throw new ConflictException(`${label} has no subjects in this exam`);
+      if (!row.complete) {
+        throw new ConflictException(`Cannot approve ${label} yet: ${row.missing} marks missing or not submitted`);
+      }
+    }
+    if (action === 'release' && row.status !== 'VERIFIED') {
+      throw new ConflictException(`${label} must be approved by the School Admin first`);
+    }
+    if (action === 'reject' && row.status !== 'VERIFIED') {
+      throw new ConflictException(`Only an approved section can be sent back`);
+    }
+    // A slip test needs only the School Admin, whose approval releases it.
+    const releases = action === 'release' || (action === 'verify' && exam.type === 'SLIP_TEST');
+    const status: ExamStatus = releases ? 'RELEASED' : action === 'verify' ? 'VERIFIED' : 'DRAFT';
+    const now = new Date();
+    const key = { examinationId_sectionId: { examinationId: exam.id, sectionId: row.section.id } };
+    const fields =
+      action === 'reject'
+        ? { status, verifiedAt: null, verifiedById: null }
+        : {
+            status,
+            ...(action === 'verify' ? { verifiedAt: now, verifiedById: context.userId } : {}),
+            ...(releases ? { releasedAt: now, releasedById: context.userId } : {}),
+          };
+    const sectionMarks: Prisma.MarkWhereInput = {
+      assessment: { examinationId: exam.id },
+      enrollment: { sectionId: row.section.id },
+    };
+    const examReleased = await this.database.$transaction(async (transaction) => {
+      await transaction.examSection.upsert({
+        where: key,
+        create: { schoolId: exam.schoolId, examinationId: exam.id, sectionId: row.section.id, ...fields },
+        update: fields,
+      });
+      if (action === 'reject') {
+        await transaction.mark.updateMany({ where: sectionMarks, data: { status: 'DRAFT' } });
+      }
+      if (releases) {
+        await transaction.mark.updateMany({ where: { ...sectionMarks, releasedAt: null }, data: { releasedAt: now } });
+      }
+      await this.audit.record(
+        context,
+        {
+          action: `examination.section-${releases ? 'release' : action}`,
+          entityType: 'examination',
+          entityId: exam.id,
+          oldValue: { sectionId: row.section.id, status: row.status },
+          newValue: { sectionId: row.section.id, status },
+          reason: note,
+        },
+        transaction,
+      );
+      if (!releases) return false;
+      // When every section is released, the exam as a whole is released.
+      const sections = await this.examSectionIds(exam.id, transaction);
+      const released = await transaction.examSection.count({
+        where: { examinationId: exam.id, status: 'RELEASED', sectionId: { in: sections } },
+      });
+      if (released < sections.length) return false;
+      await transaction.examination.update({
+        where: { id: exam.id },
+        data: { status: 'RELEASED', releasedAt: now, releasedById: context.userId },
+      });
+      return true;
+    });
+    if (releases) await this.notifyRelease(context, exam, row.section.id);
+    return {
+      sectionId: row.section.id,
+      name: label,
+      status,
+      examReleased,
+    };
+  }
+
+  /** Sections an exam covers: each section subject's section, and every section of a class-wide subject. */
+  private async examSectionIds(examinationId: string, client: Prisma.TransactionClient | DatabaseService = this.database) {
+    const assessments = await client.assessment.findMany({
+      where: { examinationId },
+      select: { classId: true, sectionId: true },
+    });
+    const ids = new Set(assessments.filter((a) => a.sectionId).map((a) => a.sectionId as string));
+    const wholeClasses = [...new Set(assessments.filter((a) => !a.sectionId).map((a) => a.classId))];
+    if (wholeClasses.length) {
+      const sections = await client.section.findMany({
+        where: { classId: { in: wholeClasses }, isArchived: false },
+        select: { id: true },
+      });
+      sections.forEach((section) => ids.add(section.id));
+    }
+    return [...ids];
+  }
+
+  private async sectionRows(exam: Examination) {
+    const assessments = await this.database.assessment.findMany({
+      where: { examinationId: exam.id },
+      select: { id: true, classId: true, sectionId: true },
+    });
+    const sectionIds = await this.examSectionIds(exam.id);
+    const [sections, approvals, enrollments, marks] = await Promise.all([
+      this.database.section.findMany({
+        where: { id: { in: sectionIds } },
+        select: { id: true, name: true, classId: true, class: { select: { id: true, name: true, sortOrder: true } } },
+      }),
+      this.database.examSection.findMany({ where: { examinationId: exam.id } }),
+      this.database.enrollment.groupBy({
+        by: ['sectionId'],
+        where: { sectionId: { in: sectionIds }, academicYearId: exam.academicYearId, status: { in: ['ACTIVE', 'PROMOTED'] } },
+        _count: { _all: true },
+      }),
+      this.database.mark.findMany({
+        where: { assessment: { examinationId: exam.id } },
+        select: { assessmentId: true, status: true, enrollment: { select: { sectionId: true } } },
+      }),
+    ]);
+    return sections
+      .sort((a, b) => a.class.sortOrder - b.class.sortOrder || a.class.name.localeCompare(b.class.name) || a.name.localeCompare(b.name))
+      .map((section) => {
+        const subjects = assessments.filter(
+          (item) => item.sectionId === section.id || (!item.sectionId && item.classId === section.classId),
+        );
+        const subjectIds = new Set(subjects.map((item) => item.id));
+        const students = enrollments.find((row) => row.sectionId === section.id)?._count._all ?? 0;
+        const own = marks.filter((mark) => mark.enrollment.sectionId === section.id && subjectIds.has(mark.assessmentId));
+        const expected = students * subjects.length;
+        const submitted = own.filter((mark) => mark.status === 'SUBMITTED').length;
+        const approval = approvals.find((row) => row.sectionId === section.id);
+        const status: ExamStatus =
+          exam.status === 'RELEASED' ? 'RELEASED' : approval?.status === 'LOCKED' ? 'VERIFIED' : approval?.status ?? 'DRAFT';
+        return {
+          section: { id: section.id, name: section.name },
+          class: { id: section.class.id, name: section.class.name },
+          subjects: subjects.length,
+          students,
+          expected,
+          entered: own.length,
+          submitted,
+          missing: Math.max(expected - submitted, 0),
+          complete: subjects.length > 0 && submitted >= expected,
+          status,
+          verifiedAt: approval?.verifiedAt ?? null,
+          releasedAt: approval?.releasedAt ?? null,
+        };
+      });
+  }
+
+  /** Exams a student or parent can see: ones with at least one released mark of theirs. */
+  private async releasedForFamily(context: SchoolContext): Promise<Prisma.ExaminationWhereInput> {
+    const scope = await this.access.studentScope(context);
+    const ids = scope.all ? [] : scope.ids;
+    return { assessments: { some: { marks: { some: { studentId: { in: ids }, releasedAt: { not: null } } } } } };
+  }
+
   async transition(authUser: SupabaseUser, examinationId: string, action: string, note?: string) {
     const context = await this.leader(authUser);
     const exam = await this.scopedExam(context, examinationId);
@@ -574,6 +836,24 @@ export class ExaminationsService implements OnModuleInit {
           where: { assessment: { examinationId: exam.id } },
           data: { status: 'DRAFT' },
         });
+        await transaction.examSection.updateMany({
+          where: { examinationId: exam.id, status: { not: 'RELEASED' } },
+          data: { status: 'DRAFT', verifiedAt: null, verifiedById: null },
+        });
+      }
+      if (releases) {
+        await transaction.mark.updateMany({
+          where: { assessment: { examinationId: exam.id }, releasedAt: null },
+          data: { releasedAt: now },
+        });
+        const sections = await this.examSectionIds(exam.id, transaction);
+        for (const sectionId of sections) {
+          await transaction.examSection.upsert({
+            where: { examinationId_sectionId: { examinationId: exam.id, sectionId } },
+            create: { schoolId: exam.schoolId, examinationId: exam.id, sectionId, status: 'RELEASED', releasedAt: now, releasedById: context.userId },
+            update: { status: 'RELEASED', releasedAt: now, releasedById: context.userId },
+          });
+        }
       }
       await this.audit.record(
         context,
@@ -635,7 +915,7 @@ export class ExaminationsService implements OnModuleInit {
         const scope = await this.access.studentScope(context);
         scoped.push({
           studentId: { in: scope.all ? [] : scope.ids },
-          assessment: { examination: { status: 'RELEASED' } },
+          releasedAt: { not: null },
         });
       }
     }
@@ -742,7 +1022,7 @@ export class ExaminationsService implements OnModuleInit {
     if (input.marksObtained !== undefined && input.marksObtained > Number(mark.assessment.maxMarks)) {
       throw new BadRequestException(`Marks cannot exceed ${mark.assessment.maxMarks}`);
     }
-    const released = mark.assessment.examination.status === 'RELEASED';
+    const released = Boolean(mark.releasedAt) || mark.assessment.examination.status === 'RELEASED';
     const payload = {
       marksObtained: input.marksObtained,
       isAbsent: input.isAbsent,
@@ -768,7 +1048,7 @@ export class ExaminationsService implements OnModuleInit {
       where: {
         studentId,
         schoolId: context.schoolId,
-        assessment: { examination: { status: 'RELEASED' } },
+        releasedAt: { not: null },
       },
       include: {
         assessment: {
@@ -853,6 +1133,12 @@ export class ExaminationsService implements OnModuleInit {
         assessment.sectionId ? 'Student is not in this section' : 'Student is not enrolled in this class',
       );
     }
+    const sectionApproval = await this.database.examSection.findUnique({
+      where: { examinationId_sectionId: { examinationId: exam.id, sectionId: enrollment.sectionId } },
+    });
+    if (sectionApproval && sectionApproval.status !== 'DRAFT') {
+      throw new ConflictException('Marks for this section are already approved; use a correction request');
+    }
     const existing = await this.database.mark.findUnique({
       where: { assessmentId_studentId: { assessmentId: assessment.id, studentId: entry.studentId } },
     });
@@ -912,13 +1198,17 @@ export class ExaminationsService implements OnModuleInit {
   private async manageableStudentIds(context: SchoolContext, assessment: Assessment): Promise<string[] | true> {
     if (context.isLeader) return true;
     if (!context.staffId) return [];
-    const exam = await this.database.examination.findUniqueOrThrow({ where: { id: assessment.examinationId } });
+    const [exam, subject] = await Promise.all([
+      this.database.examination.findUniqueOrThrow({ where: { id: assessment.examinationId } }),
+      this.database.subject.findUniqueOrThrow({ where: { id: assessment.subjectId }, select: { code: true } }),
+    ]);
+    // The teacher's own assignment for this subject, or an older school-wide subject with the same code.
     const assignments = await this.database.staffAssignment.findMany({
       where: {
         staffId: context.staffId,
         classId: assessment.classId,
-        subjectId: assessment.subjectId,
         academicYearId: exam.academicYearId,
+        OR: [{ subjectId: assessment.subjectId }, { subject: { sectionId: null, code: subject.code } }],
       },
     });
     if (!assignments.length) return [];
@@ -952,12 +1242,23 @@ export class ExaminationsService implements OnModuleInit {
     if (!context.staffId) return [{ id: '00000000-0000-0000-0000-000000000000' }];
     const assignments = await this.database.staffAssignment.findMany({
       where: { staffId: context.staffId },
+      include: { subject: { select: { code: true, sectionId: true } } },
     });
     if (!assignments.length) return [{ id: '00000000-0000-0000-0000-000000000000' }];
     return assignments.map((assignment) => ({
-      assessment: { classId: assignment.classId, subjectId: assignment.subjectId },
+      assessment: { AND: [{ classId: assignment.classId }, this.subjectMatch(assignment)] },
       ...(assignment.sectionId ? { enrollment: { sectionId: assignment.sectionId } } : {}),
     }));
+  }
+
+  /**
+   * Exam subjects an assignment covers. Section subjects match exactly. An older school-wide subject
+   * (no section) also covers the section subjects with the same code, so teachers assigned before
+   * subjects became per-section still see and mark their exams.
+   */
+  private subjectMatch(assignment: { subjectId: string; subject: { code: string; sectionId: string | null } }): Prisma.AssessmentWhereInput {
+    if (assignment.subject.sectionId) return { subjectId: assignment.subjectId };
+    return { OR: [{ subjectId: assignment.subjectId }, { subject: { code: assignment.subject.code, sectionId: { not: null } } }] };
   }
 
   private async verificationData(context: SchoolContext, exam: Examination) {
@@ -1001,9 +1302,9 @@ export class ExaminationsService implements OnModuleInit {
     return { examinationId: exam.id, status: exam.status, missing, unsubmitted, assessments: rows };
   }
 
-  private async notifyRelease(context: SchoolContext, exam: Examination) {
+  private async notifyRelease(context: SchoolContext, exam: Examination, sectionId?: string) {
     const students = await this.database.mark.findMany({
-      where: { assessment: { examinationId: exam.id } },
+      where: { assessment: { examinationId: exam.id }, ...(sectionId ? { enrollment: { sectionId } } : {}) },
       distinct: ['studentId'],
       select: { studentId: true },
     });

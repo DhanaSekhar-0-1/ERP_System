@@ -150,32 +150,52 @@ export function TeacherAttendancePage() {
   );
 }
 
-/** Exam subjects in the teacher's assignments that still accept marks. */
+const MARK_STATE: Record<string, { label: string; className: string }> = {
+  DRAFT: { label: 'Waiting for marks', className: 'bg-slate-100 text-slate-700' },
+  VERIFIED: { label: 'Approved by admin', className: 'bg-amber-100 text-amber-800' },
+  RELEASED: { label: 'Results released', className: 'bg-emerald-100 text-emerald-800' },
+};
+
+/** Exam subjects in the teacher's own classes: still open for marks, approved, and released. */
 export function MarksListPage() {
   const assessments = useQuery({ queryKey: ['my-assessments'], queryFn: api.myAssessments });
+  const groups = [
+    { title: 'Waiting for your marks', items: assessments.data?.filter((item) => item.status === 'DRAFT') ?? [] },
+    { title: 'Approved, waiting for release', items: assessments.data?.filter((item) => item.status === 'VERIFIED' || item.status === 'LOCKED') ?? [] },
+    { title: 'Results released', items: assessments.data?.filter((item) => item.status === 'RELEASED') ?? [] },
+  ];
   return (
     <>
-      <PageHeader title="Marks entry" subtitle="Exams and slip tests for your own subjects that are waiting for marks." />
+      <PageHeader title="Marks entry" subtitle="Exams and slip tests for your own subjects. Released results are visible to students and parents." />
       {assessments.isLoading && <Message>Loading…</Message>}
       {assessments.isError && <Message tone="error">{errorText(assessments.error)}</Message>}
-      {assessments.data?.length === 0 && <Message>Nothing waiting for marks.</Message>}
-      <div className="grid gap-3 md:grid-cols-2">
-        {assessments.data?.map((item) => {
-          const done = item.students !== null && item.submitted >= item.students && item.students > 0;
-          return (
-            <Link key={item.id} to={`/marks/${item.id}`} className="rounded-2xl border border-line bg-white p-4 shadow-sm hover:border-brand">
-              <div className="flex items-start justify-between gap-2">
-                <span>
-                  <span className="block font-bold">{item.examination.name}</span>
-                  <span className="text-sm text-muted">{item.subject.name} · {item.class.name}{item.section ? `-${item.section.name}` : ''} · out of {item.maxMarks}</span>
-                </span>
-                {done ? <CheckCircle2 className="size-5 text-emerald-600" aria-label="Submitted" /> : <ClipboardList className="size-5 text-muted" aria-hidden />}
-              </div>
-              <p className="mt-2 text-xs text-muted">{item.entered} entered · {item.submitted} submitted{item.students !== null ? ` of ${item.students}` : ''}</p>
-            </Link>
-          );
-        })}
-      </div>
+      {assessments.data?.length === 0 && <Message>No exams for your subjects yet.</Message>}
+      {groups.filter((group) => group.items.length).map((group) => (
+        <section key={group.title} className="mb-6">
+          <h2 className="mb-2 text-sm font-bold tracking-wide text-muted uppercase">{group.title}</h2>
+          <div className="grid gap-3 md:grid-cols-2">
+            {group.items.map((item) => {
+              const done = item.students !== null && item.submitted >= item.students && item.students > 0;
+              const state = MARK_STATE[item.status] ?? MARK_STATE.DRAFT;
+              return (
+                <Link key={item.id} to={`/marks/${item.id}`} className="rounded-2xl border border-line bg-white p-4 shadow-sm hover:border-brand">
+                  <div className="flex items-start justify-between gap-2">
+                    <span>
+                      <span className="block font-bold">{item.examination.name}</span>
+                      <span className="text-sm text-muted">{item.subject.name} · {item.class.name}{item.section ? `-${item.section.name}` : ''} · out of {item.maxMarks}</span>
+                    </span>
+                    {item.status === 'DRAFT' && (done ? <CheckCircle2 className="size-5 text-emerald-600" aria-label="Submitted" /> : <ClipboardList className="size-5 text-muted" aria-hidden />)}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${state.className}`}>{state.label}</span>
+                    <span className="text-xs text-muted">{item.entered} entered · {item.submitted} submitted{item.students !== null ? ` of ${item.students}` : ''}</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </>
   );
 }

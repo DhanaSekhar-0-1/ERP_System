@@ -24,13 +24,14 @@ function Kpi({ label, value, note, icon: Icon, tint }: { label: string; value: s
 export function OverviewPage() {
   const { user } = useAuth();
   const today = isoDate();
-  const dashboard = useQuery({ queryKey: ['dashboard'], queryFn: api.principalDashboard, refetchInterval: 15_000 });
+  // The dashboard refreshes every 2 minutes while open, and not while the tab is hidden.
+  const dashboard = useQuery({ queryKey: ['dashboard'], queryFn: api.principalDashboard, refetchInterval: 120_000 });
   const trend = useQuery({ queryKey: ['trend'], queryFn: () => api.attendanceTrend(daysAgo(63), today) });
   const risk = useQuery({ queryKey: ['risk'], queryFn: api.attendanceRisk });
   const sections = useQuery({
     queryKey: ['sections', today],
     queryFn: () => api.mySections(today),
-    refetchInterval: 15_000,
+    refetchInterval: 120_000,
   });
 
   if (dashboard.isError) return <Message tone="error">{errorText(dashboard.error)}</Message>;

@@ -1,7 +1,7 @@
 import { QueryClient, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, ReactNode, useContext, useEffect, useMemo } from 'react';
 import type { UserContext } from '@erp/shared';
-import { api, signedOut } from './api';
+import { api, SESSION_KEY, signedOut } from './api';
 
 interface Auth {
   user: UserContext | null;
@@ -30,6 +30,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const reset = () => clearSession(client);
     signedOut.addEventListener('signedout', reset);
     return () => signedOut.removeEventListener('signedout', reset);
+  }, [client]);
+
+  // All tabs share one saved session. When another tab signs in as someone else or signs out,
+  // drop everything this tab loaded and read who is signed in again, so its screens and its
+  // requests always belong to the same person.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== SESSION_KEY && event.key !== null) return;
+      client.removeQueries({ predicate: (query) => query.queryKey[0] !== 'context' });
+      void client.invalidateQueries({ queryKey: ['context'] });
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, [client]);
 
   const value = useMemo<Auth>(

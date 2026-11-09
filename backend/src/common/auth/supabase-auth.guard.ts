@@ -45,20 +45,12 @@ export class SupabaseAuthGuard implements CanActivate {
       throw new UnauthorizedException('Bearer access token is required');
     }
 
-    const user = await this.auth.getUserFromAccessToken(accessToken);
-    const sessionId = this.auth.sessionIdFromToken(accessToken);
-    if (sessionId) {
-      await this.assertSessionActive(sessionId);
+    // Checked locally against Supabase's public signing keys; no call to Supabase per request.
+    const user = await this.auth.verifyAccessToken(accessToken);
+    if (user.sessionId) {
+      await this.assertSessionActive(user.sessionId);
     }
-    request.user = {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      appMetadata: user.app_metadata,
-      userMetadata: user.user_metadata,
-      sessionId,
-      accessToken,
-    };
+    request.user = user;
     return true;
   }
 

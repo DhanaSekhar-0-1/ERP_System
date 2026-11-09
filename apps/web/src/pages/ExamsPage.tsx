@@ -6,6 +6,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { useActiveYear } from '../hooks';
 import { buttonClass, Card, errorText, ghostButtonClass, inputClass, Message, PageHeader } from '../components/ui';
+import { ClassMultiSelect } from '../components/ClassMultiSelect';
 import { Dialog, Field } from '../components/Dialog';
 
 const TYPE_LABELS: Record<ExamType, string> = {
@@ -36,15 +37,28 @@ function CreateExamDialog({ yearId, onClose }: { yearId: string; onClose(): void
   const [name, setName] = useState('');
   const [startsOn, setStartsOn] = useState('');
   const [endsOn, setEndsOn] = useState('');
+  const [classIds, setClassIds] = useState<string[]>([]);
+  const [maxMarks, setMaxMarks] = useState('');
+  const [passMarks, setPassMarks] = useState('');
+  const classes = useQuery({ queryKey: ['classes', yearId], queryFn: () => api.classes(yearId) });
   const create = useMutation({
-    mutationFn: () =>
-      api.createExamination({
+    mutationFn: async () => {
+      const exam = await api.createExamination({
         academicYearId: yearId,
         type,
         name: name.trim() || undefined,
         startsOn: startsOn || undefined,
         endsOn: endsOn || undefined,
-      }),
+      });
+      if (classIds.length) {
+        await api.addClassSubjects(exam.id, {
+          classIds,
+          maxMarks: Number(maxMarks),
+          passMarks: passMarks ? Number(passMarks) : undefined,
+        });
+      }
+      return exam;
+    },
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ['exams'] });
       onClose();
@@ -62,7 +76,7 @@ function CreateExamDialog({ yearId, onClose }: { yearId: string; onClose(): void
       footer={
         <>
           <button type="button" onClick={onClose} className={ghostButtonClass}>Cancel</button>
-          <button disabled={create.isPending} className={buttonClass}>{create.isPending ? 'Saving…' : 'Create exam'}</button>
+          <button disabled={create.isPending} className={buttonClass}>{create.isPending ? 'Saving…' : classIds.length ? `Create for ${classIds.length} class${classIds.length === 1 ? '' : 'es'}` : 'Create exam'}</button>
         </>
       }
     >
@@ -82,7 +96,23 @@ function CreateExamDialog({ yearId, onClose }: { yearId: string; onClose(): void
           <input type="date" value={endsOn} onChange={(event) => setEndsOn(event.target.value)} className={inputClass} />
         </Field>
       </div>
-      <p className="text-xs text-muted">Teachers create slip tests themselves for their own classes.</p>
+      <Field label="Classes (optional)">
+        <ClassMultiSelect classes={(classes.data ?? []).filter((item) => type !== 'PRE_PUBLIC' || /\b(10|x)\b/i.test(item.name) || item.sortOrder === 10)} value={classIds} onChange={setClassIds} />
+      </Field>
+      {classIds.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Maximum marks">
+            <input required type="number" min={1} step="0.5" value={maxMarks} onChange={(event) => setMaxMarks(event.target.value)} className={inputClass} />
+          </Field>
+          <Field label="Pass marks (optional)">
+            <input type="number" min={0} step="0.5" value={passMarks} onChange={(event) => setPassMarks(event.target.value)} className={inputClass} />
+          </Field>
+        </div>
+      )}
+      <p className="text-xs text-muted">
+        Every subject that is switched on, in every section of the chosen classes, is added to the exam. You can add classes
+        later too. Teachers create slip tests themselves.
+      </p>
       {create.isError && <p role="alert" className="text-sm font-medium text-red-600">{errorText(create.error)}</p>}
     </Dialog>
   );
@@ -96,25 +126,26 @@ function AddSubjectDialog({ exam, onClose }: { exam: Examination; onClose(): voi
   const [passMarks, setPassMarks] = useState('');
   const [sectionId, setSectionId] = useState('');
   const [wholeClass, setWholeClass] = useState(true);
+  const [classIds, setClassIds] = useState<string[]>([]);
   const classes = useQuery({ queryKey: ['classes', exam.academicYearId], queryFn: () => api.classes(exam.academicYearId) });
   const sections = useQuery({ queryKey: ['sections', classId], queryFn: () => api.sections(classId), enabled: Boolean(classId) && !wholeClass });
   const subjects = useQuery({ queryKey: ['section-subjects', sectionId], queryFn: () => api.sectionSubjects(sectionId), enabled: Boolean(sectionId) && !wholeClass });
   const add = useMutation({
     mutationFn: async () => {
       const marks = { maxMarks: Number(maxMarks), passMarks: passMarks ? Number(passMarks) : undefined };
-      if (wholeClass) return api.addClassSubjects(exam.id, { classId, ...marks });
+      if (wholeClass) return api.addClassSubjects(exam.id, { classIds, ...marks });
       return api.addAssessment(exam.id, { classId, subjectId, ...marks });
     },
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ['exams'] });
-      await client.invalidateQueries({ queryKey: ['verification', exam.id] });
+      await client.invalidateQueries({ queryKey: ['exam-sections', exam.id] });
       onClose();
     },
   });
 
   return (
     <Dialog
-      title={`Add a subject to ${exam.name}`}
+      title={`Add subjects to ${exam.name}`}
       onClose={onClose}
       onSubmit={(event) => {
         event.preventDefault();
@@ -123,13 +154,13 @@ function AddSubjectDialog({ exam, onClose }: { exam: Examination; onClose(): voi
       footer={
         <>
           <button type="button" onClick={onClose} className={ghostButtonClass}>Cancel</button>
-          <button disabled={add.isPending} className={buttonClass}>{add.isPending ? 'Saving…' : wholeClass ? 'Add all subjects' : 'Add subject'}</button>
+          <button disabled={add.isPending || (wholeClass && !classIds.length)} className={buttonClass}>{add.isPending ? 'Saving…' : wholeClass ? `Add all subjects${classIds.length ? ` (${classIds.length} class${classIds.length === 1 ? '' : 'es'})` : ''}` : 'Add subject'}</button>
         </>
       }
     >
       <div role="radiogroup" aria-label="What to add" className="grid gap-2 sm:grid-cols-2">
         {[
-          { value: true, label: 'Whole class', hint: 'Every subject that is on, in every section' },
+          { value: true, label: 'Whole classes', hint: 'Every subject that is on, in every section of the chosen classes' },
           { value: false, label: 'One subject', hint: 'A single subject of one section' },
         ].map((option) => (
           <label key={option.label} className={'cursor-pointer rounded-xl border p-3 text-sm ' + (wholeClass === option.value ? 'border-brand bg-brand-soft' : 'border-line')}>
@@ -140,12 +171,22 @@ function AddSubjectDialog({ exam, onClose }: { exam: Examination; onClose(): voi
         ))}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Class">
-          <select required value={classId} onChange={(event) => { setClassId(event.target.value); setSectionId(''); setSubjectId(''); }} className={inputClass}>
-            <option value="">Choose a class</option>
-            {classes.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-        </Field>
+        {wholeClass ? (
+          <Field label="Classes">
+            <ClassMultiSelect
+              classes={(classes.data ?? []).filter((item) => exam.type !== 'PRE_PUBLIC' || /\b(10|x)\b/i.test(item.name) || item.sortOrder === 10)}
+              value={classIds}
+              onChange={setClassIds}
+            />
+          </Field>
+        ) : (
+          <Field label="Class">
+            <select required value={classId} onChange={(event) => { setClassId(event.target.value); setSectionId(''); setSubjectId(''); }} className={inputClass}>
+              <option value="">Choose a class</option>
+              {classes.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </Field>
+        )}
         {!wholeClass && (
           <Field label="Section">
             <select required value={sectionId} disabled={!classId} onChange={(event) => { setSectionId(event.target.value); setSubjectId(''); }} className={inputClass}>
@@ -174,30 +215,74 @@ function AddSubjectDialog({ exam, onClose }: { exam: Examination; onClose(): voi
   );
 }
 
+const SECTION_STATUS: Record<ExamStatus, { label: string; className: string }> = {
+  DRAFT: { label: 'Waiting for marks', className: 'bg-slate-100 text-slate-700' },
+  VERIFIED: { label: 'Admin approved', className: 'bg-amber-100 text-amber-800' },
+  LOCKED: { label: 'Admin approved', className: 'bg-amber-100 text-amber-800' },
+  RELEASED: { label: 'Released to families', className: 'bg-emerald-100 text-emerald-800' },
+};
+
+/** One exam with its sections: each section is approved and released on its own. */
 function ExamRow({ exam, onAddSubject }: { exam: Examination; onAddSubject(exam: Examination): void }) {
   const { user } = useAuth();
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [notice, setNotice] = useState('');
   const roles = user?.roles ?? [];
   const permissions = user?.permissions ?? [];
   const isAdmin = roles.includes('School Admin') || roles.includes('Super Admin');
   const isPrincipal = roles.includes('Principal') || roles.includes('Super Admin');
   const slipTest = exam.type === 'SLIP_TEST';
-  const approved = exam.status === 'VERIFIED' || exam.status === 'LOCKED';
-  const verification = useQuery({
-    queryKey: ['verification', exam.id],
-    queryFn: () => api.examVerification(exam.id),
-    enabled: open && permissions.includes('marks:verify'),
+  const canView = permissions.includes('marks:verify');
+  const progress = useQuery({
+    queryKey: ['exam-sections', exam.id],
+    queryFn: () => api.examSections(exam.id),
+    enabled: canView,
   });
-  const act = useMutation({
-    mutationFn: (action: 'verify' | 'reject' | 'release') => api.examAction(exam.id, action),
-    onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: ['exams'] });
-      await client.invalidateQueries({ queryKey: ['verification', exam.id] });
+  const refresh = async () => {
+    await client.invalidateQueries({ queryKey: ['exams'] });
+    await client.invalidateQueries({ queryKey: ['exam-sections', exam.id] });
+  };
+  const sectionAct = useMutation({
+    mutationFn: ({ sectionId, action }: { sectionId: string; action: 'verify' | 'release' | 'reject' }) =>
+      api.sectionAction(exam.id, sectionId, action),
+    onSuccess: async (result) => {
+      setNotice(result.examReleased ? `${result.name} released. Every section is now released.` : '');
+      await refresh();
     },
   });
-  const status = STATUS[exam.status];
-  const ready = verification.data ? verification.data.missing === 0 && verification.data.unsubmitted === 0 : true;
+  const bulk = useMutation({
+    mutationFn: async (action: 'verify' | 'release') => {
+      if (action === 'verify') {
+        const result = await api.approveReadySections(exam.id);
+        return { verb: 'Approved', done: result.approved, waiting: result.waiting };
+      }
+      const result = await api.releaseApprovedSections(exam.id);
+      return { verb: 'Released', done: result.released, waiting: result.waiting };
+    },
+    onSuccess: async (result) => {
+      const { done, verb } = result;
+      setNotice(
+        done.length
+          ? `${verb} ${done.map((row) => row.name).join(', ')}.${result.waiting.length ? ` Still waiting: ${result.waiting.map((row) => row.name).join(', ')}.` : ''}`
+          : `Nothing to ${verb === 'Approved' ? 'approve' : 'release'} yet.`,
+      );
+      await refresh();
+    },
+  });
+  const sections = progress.data?.sections ?? [];
+  const readyCount = sections.filter((row) => row.status === 'DRAFT' && row.complete).length;
+  const approvedCount = sections.filter((row) => row.status === 'VERIFIED').length;
+  const releasedCount = sections.filter((row) => row.status === 'RELEASED').length;
+  const summary =
+    exam.status === 'RELEASED'
+      ? STATUS.RELEASED
+      : releasedCount
+        ? { label: `${releasedCount} of ${sections.length} released`, className: 'bg-emerald-50 text-emerald-800' }
+        : approvedCount
+          ? { label: `${approvedCount} of ${sections.length} approved`, className: STATUS.VERIFIED.className }
+          : STATUS[exam.status];
+  const error = sectionAct.error ?? bulk.error;
 
   return (
     <li className="py-4">
@@ -207,67 +292,95 @@ function ExamRow({ exam, onAddSubject }: { exam: Examination; onAddSubject(exam:
           <span>
             <span className="block font-bold">{exam.name}</span>
             <span className="text-xs text-muted">
-              {TYPE_LABELS[exam.type]} · {exam._count?.assessments ?? 0} subject(s)
+              {TYPE_LABELS[exam.type]} · {exam._count?.assessments ?? 0} subject(s){sections.length ? ` · ${sections.length} section(s)` : ''}
             </span>
           </span>
         </button>
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${status.className}`}>{status.label}</span>
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${summary.className}`}>{summary.label}</span>
         <div className="flex flex-wrap gap-2">
           {exam.status === 'DRAFT' && permissions.includes('examinations:manage') && !slipTest && (
             <button onClick={() => onAddSubject(exam)} className={ghostButtonClass}>
-              <Plus className="size-4" aria-hidden /> Subject
+              <Plus className="size-4" aria-hidden /> Subjects
             </button>
           )}
-          {exam.status === 'DRAFT' && isAdmin && Boolean(exam._count?.assessments) && (
-            <button disabled={act.isPending} onClick={() => act.mutate('verify')} className={buttonClass}>
-              <CheckCircle2 className="size-4" aria-hidden /> {slipTest ? 'Approve and release' : 'Approve marks'}
+          {exam.status === 'DRAFT' && isAdmin && readyCount > 0 && (
+            <button disabled={bulk.isPending} onClick={() => bulk.mutate('verify')} className={buttonClass}>
+              <CheckCircle2 className="size-4" aria-hidden /> {slipTest ? 'Approve and release' : `Approve ${readyCount} ready section${readyCount === 1 ? '' : 's'}`}
             </button>
           )}
-          {approved && isPrincipal && !slipTest && (
-            <button disabled={act.isPending} onClick={() => act.mutate('release')} className={buttonClass}>
-              <Send className="size-4" aria-hidden /> Final approval and release
-            </button>
-          )}
-          {approved && permissions.includes('marks:verify') && (
-            <button disabled={act.isPending} onClick={() => act.mutate('reject')} className={ghostButtonClass}>
-              <Undo2 className="size-4" aria-hidden /> Send back
+          {exam.status === 'DRAFT' && isPrincipal && !slipTest && approvedCount > 0 && (
+            <button disabled={bulk.isPending} onClick={() => bulk.mutate('release')} className={buttonClass}>
+              <Send className="size-4" aria-hidden /> Release {approvedCount} approved section{approvedCount === 1 ? '' : 's'}
             </button>
           )}
         </div>
       </div>
-      {act.isError && <p role="alert" className="mt-2 text-sm font-medium text-red-600">{errorText(act.error)}</p>}
+      {error && <p role="alert" className="mt-2 text-sm font-medium text-red-600">{errorText(error)}</p>}
+      {notice && !error && <p role="status" className="mt-2 text-sm font-medium text-emerald-700">{notice}</p>}
       {open && (
-        <div className="mt-3 rounded-xl bg-page p-3">
-          {verification.isLoading && <p className="text-sm text-muted">Loading marks progress…</p>}
-          {verification.isError && <p className="text-sm text-red-600">{errorText(verification.error)}</p>}
-          {verification.data?.assessments.length === 0 && <p className="text-sm text-muted">No subjects added yet.</p>}
-          {verification.data && verification.data.assessments.length > 0 && (
-            <table className="w-full text-sm">
+        <div className="mt-3 overflow-x-auto rounded-xl bg-page p-3">
+          {progress.isLoading && <p className="text-sm text-muted">Loading sections…</p>}
+          {progress.isError && <p className="text-sm text-red-600">{errorText(progress.error)}</p>}
+          {progress.data && sections.length === 0 && <p className="text-sm text-muted">No subjects added yet.</p>}
+          {sections.length > 0 && (
+            <table className="w-full min-w-[36rem] text-sm">
               <thead className="text-left text-xs text-muted">
                 <tr>
-                  <th className="pb-2">Class</th>
-                  <th className="pb-2">Subject</th>
-                  <th className="pb-2">Marks entered</th>
-                  <th className="pb-2">Submitted by teacher</th>
+                  <th className="pb-2">Section</th>
+                  <th className="pb-2">Subjects</th>
+                  <th className="pb-2">Marks submitted</th>
+                  <th className="pb-2">Status</th>
+                  <th className="pb-2" />
                 </tr>
               </thead>
               <tbody>
-                {verification.data.assessments.map((row) => (
-                  <tr key={row.assessmentId} className="border-t border-line">
-                    <td className="py-2">{row.section ? `${row.class.name}-${row.section.name}` : row.class.name}</td>
-                    <td className="py-2">{row.subject.name}</td>
-                    <td className="py-2">{row.entered} / {row.enrolled}</td>
-                    <td className={`py-2 font-semibold ${row.complete ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      {row.submitted} / {row.enrolled}
-                    </td>
-                  </tr>
-                ))}
+                {sections.map((row) => {
+                  const state = SECTION_STATUS[row.status];
+                  const busy = sectionAct.isPending && sectionAct.variables?.sectionId === row.section.id;
+                  return (
+                    <tr key={row.section.id} className="border-t border-line">
+                      <td className="py-2 font-semibold">{row.class.name}-{row.section.name}</td>
+                      <td className="py-2">{row.subjects}</td>
+                      <td className={`py-2 font-semibold ${row.complete ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {row.submitted} / {row.expected}
+                        <span className="ml-1 text-xs font-normal text-muted">({row.students} students)</span>
+                      </td>
+                      <td className="py-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${state.className}`}>{state.label}</span>
+                      </td>
+                      <td className="py-2 text-right whitespace-nowrap">
+                        {exam.status === 'DRAFT' && row.status === 'DRAFT' && isAdmin && (
+                          <button
+                            disabled={!row.complete || busy}
+                            title={row.complete ? undefined : `${row.missing} marks missing or not submitted`}
+                            onClick={() => sectionAct.mutate({ sectionId: row.section.id, action: 'verify' })}
+                            className={`${buttonClass} px-3 py-1.5 text-xs`}
+                          >
+                            {slipTest ? 'Approve and release' : 'Approve'}
+                          </button>
+                        )}
+                        {exam.status === 'DRAFT' && row.status === 'VERIFIED' && isPrincipal && !slipTest && (
+                          <button disabled={busy} onClick={() => sectionAct.mutate({ sectionId: row.section.id, action: 'release' })} className={`${buttonClass} px-3 py-1.5 text-xs`}>
+                            Release
+                          </button>
+                        )}
+                        {exam.status === 'DRAFT' && row.status === 'VERIFIED' && (isAdmin || isPrincipal) && (
+                          <button disabled={busy} onClick={() => sectionAct.mutate({ sectionId: row.section.id, action: 'reject' })} className={`${ghostButtonClass} ml-1 px-3 py-1.5 text-xs`}>
+                            <Undo2 className="size-3.5" aria-hidden /> Send back
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
-          {exam.status === 'DRAFT' && !ready && (
-            <p className="mt-2 text-xs text-muted">Marks can be approved once every teacher has entered and submitted them.</p>
-          )}
+          <p className="mt-2 text-xs text-muted">
+            {slipTest
+              ? 'A slip test is released as soon as the School Admin approves it.'
+              : 'Each section is approved by the School Admin when its marks are complete, then released by the Principal. Released sections are visible to their students, parents and teachers straight away.'}
+          </p>
         </div>
       )}
     </li>
@@ -292,7 +405,7 @@ export function ExamsPage() {
     <>
       <PageHeader
         title="Exams"
-        subtitle="Teachers submit marks, the School Admin approves them, and the Principal gives final approval. Slip tests need only the School Admin."
+        subtitle="Teachers submit marks. The School Admin approves each section when it is complete and the Principal releases it, so finished sections do not wait for the rest. Slip tests need only the School Admin."
         action={
           canCreate && year && (
             <button onClick={() => setCreating(true)} className={buttonClass}>

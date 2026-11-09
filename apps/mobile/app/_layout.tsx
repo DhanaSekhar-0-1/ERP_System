@@ -5,7 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../src/auth';
 
 const client = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 15_000 } },
+  defaultOptions: { queries: { retry: 1, staleTime: 60_000 } },
 });
 
 export default function RootLayout() {

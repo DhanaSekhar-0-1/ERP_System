@@ -381,9 +381,8 @@ export class InsightsService {
       where: {
         schoolId: context.schoolId,
         isAbsent: false,
-        assessment: {
-          examination: { status: 'RELEASED', ...(examinationId ? { id: examinationId } : {}) },
-        },
+        releasedAt: { not: null },
+        ...(examinationId ? { assessment: { examinationId } } : {}),
       },
       select: {
         marksObtained: true,
@@ -636,8 +635,8 @@ export class InsightsService {
           select: { id: true, fromDate: true, toDate: true },
         }),
         this.database.examination.findFirst({
-          where: { status: 'RELEASED', assessments: { some: { marks: { some: { studentId: student.id } } } } },
-          orderBy: { releasedAt: 'desc' },
+          where: { assessments: { some: { marks: { some: { studentId: student.id, releasedAt: { not: null } } } } } },
+          orderBy: { createdAt: 'desc' },
           select: { id: true, name: true, releasedAt: true },
         }),
       ]);

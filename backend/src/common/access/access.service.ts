@@ -43,20 +43,51 @@ export interface TeacherCoverage {
   subjectIds: string[];
 }
 
+/** How long a user's roles and permissions are reused before being read again. */
+export const ACCESS_CACHE_TTL_MS = 60_000;
+const ACCESS_CACHE_MAX = 5_000;
+
 @Injectable()
 export class AccessService {
   private readonly cache = new WeakMap<SupabaseUser, Promise<AccessContext>>();
 
+  /**
+   * Roles, permissions and account status per signed-in user, reused for a minute so repeated
+   * requests skip the lookups. Cleared by AccessCacheInterceptor whenever users, roles, staff or
+   * schools change. Teacher assignments are not cached: they are read on every request, so
+   * removing one still takes effect at once.
+   */
+  private readonly shared = new Map<string, { expires: number; value: Promise<AccessContext> }>();
+
   constructor(private readonly database: DatabaseService) {}
 
-  /** Loads the caller's ERP identity once per request. */
+  /** Loads the caller's ERP identity, reusing a recent copy for the same user. */
   context(authUser: SupabaseUser): Promise<AccessContext> {
     let pending = this.cache.get(authUser);
     if (!pending) {
-      pending = this.load(authUser);
+      pending = this.sharedContext(authUser);
       this.cache.set(authUser, pending);
     }
     return pending;
+  }
+
+  /** Forgets every cached user so the next request reads roles and permissions again. */
+  invalidate(): void {
+    this.shared.clear();
+  }
+
+  private sharedContext(authUser: SupabaseUser): Promise<AccessContext> {
+    const now = Date.now();
+    const hit = this.shared.get(authUser.id);
+    if (hit && hit.expires > now) return hit.value;
+    if (this.shared.size >= ACCESS_CACHE_MAX) this.shared.clear();
+    const value = this.load(authUser);
+    this.shared.set(authUser.id, { expires: now + ACCESS_CACHE_TTL_MS, value });
+    // A refused or failed load is not kept, so a fixed account works on the next request.
+    value.catch(() => {
+      if (this.shared.get(authUser.id)?.value === value) this.shared.delete(authUser.id);
+    });
+    return value;
   }
 
   async schoolContext(authUser: SupabaseUser): Promise<SchoolContext> {

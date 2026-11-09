@@ -93,6 +93,60 @@ export class ExaminationsController {
     return this.exams.addClassSubjects(user, examinationId, input);
   }
 
+  /** Marks progress and approval status of each section the exam covers. */
+  @Get(':examinationId/sections')
+  @RequirePermissions('marks:verify')
+  sections(@CurrentUser() user: SupabaseUser, @Param('examinationId', ParseUUIDPipe) examinationId: string) {
+    return this.exams.sectionProgress(user, examinationId);
+  }
+
+  /** School Admin approves every section whose marks are complete. */
+  @Post(':examinationId/sections/verify-ready')
+  @RequirePermissions('marks:verify')
+  verifyReadySections(@CurrentUser() user: SupabaseUser, @Param('examinationId', ParseUUIDPipe) examinationId: string) {
+    return this.exams.bulkSectionAction(user, examinationId, 'verify');
+  }
+
+  /** Principal releases every approved section. */
+  @Post(':examinationId/sections/release-approved')
+  @RequirePermissions('examinations:release')
+  releaseApprovedSections(@CurrentUser() user: SupabaseUser, @Param('examinationId', ParseUUIDPipe) examinationId: string) {
+    return this.exams.bulkSectionAction(user, examinationId, 'release');
+  }
+
+  @Post(':examinationId/sections/:sectionId/verify')
+  @RequirePermissions('marks:verify')
+  verifySection(
+    @CurrentUser() user: SupabaseUser,
+    @Param('examinationId', ParseUUIDPipe) examinationId: string,
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+    @Body() input: ExamNoteDto,
+  ) {
+    return this.exams.sectionAction(user, examinationId, sectionId, 'verify', input.note);
+  }
+
+  @Post(':examinationId/sections/:sectionId/release')
+  @RequirePermissions('examinations:release')
+  releaseSection(
+    @CurrentUser() user: SupabaseUser,
+    @Param('examinationId', ParseUUIDPipe) examinationId: string,
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+    @Body() input: ExamNoteDto,
+  ) {
+    return this.exams.sectionAction(user, examinationId, sectionId, 'release', input.note);
+  }
+
+  @Post(':examinationId/sections/:sectionId/reject')
+  @RequirePermissions('marks:verify')
+  rejectSection(
+    @CurrentUser() user: SupabaseUser,
+    @Param('examinationId', ParseUUIDPipe) examinationId: string,
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+    @Body() input: ExamNoteDto,
+  ) {
+    return this.exams.sectionAction(user, examinationId, sectionId, 'reject', input.note);
+  }
+
   @Get(':examinationId/verification')
   @RequirePermissions('marks:verify')
   verification(

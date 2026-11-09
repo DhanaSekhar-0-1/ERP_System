@@ -218,7 +218,7 @@ async function main() {
   const enrollment2 = (await expect('enroll second student in 8-B', admin, 'POST', '/enrollments', {
     academicYearId: year.id, studentId: newStudent.id, classId: cls.id, sectionId: secB.id, rollNumber: '2',
   })).data;
-  const visible = (await call(teacher, 'GET', '/students')).data;
+  const visible = (await call(teacher, 'GET', '/students?search=TEST-STUDENT-001')).data;
   check('teacher sees students in assigned classes', visible.some((s) => s.id === studentId), visible?.map((s) => s.firstName));
   await expect('student cannot see another student', student, 'GET', `/students/${newStudent.id}`, undefined, 403);
   await expect('teacher cannot edit student contact details', teacher, 'PATCH', `/students/${studentId}`, { phone: '9000000000' }, 403);
@@ -766,6 +766,57 @@ async function main() {
   check('one exam subject per section subject (7 in A + 8 in B)', added?.added === 15, added);
   const again = (await call(manager, 'POST', `/examinations/${unitTest?.id}/assessments/class`, { classId: class1?.id, maxMarks: 25 })).data;
   check('adding the class again skips existing subjects', again?.added === 0 && again.skipped === 15, again);
+  const sharedExam = (await expect('create one exam for several classes', manager, 'POST', '/examinations', { academicYearId: year.id, type: 'OTHER', name: `Shared test ${RUN}` })).data;
+  const shared = (await expect('add Class 1 and Class 8 to the same exam in one request', manager, 'POST', `/examinations/${sharedExam?.id}/assessments/class`, { classIds: [class1?.id, cls.id], maxMarks: 50, passMarks: 18 })).data;
+  check('both classes get their subjects', shared?.classes === 2 && shared.added > 15, shared);
+  const teacherExams = (await expect('teacher lists exams waiting for marks', teacher, 'GET', '/marks/my-assessments')).data ?? [];
+  const sharedMaths = teacherExams.find((x) => x.examination.id === sharedExam?.id && x.subject.name === 'Mathematics' && x.section?.id === secA.id);
+  check('an older school-wide Maths assignment covers 8-A section Maths', sharedMaths, teacherExams.map((x) => `${x.examination.name} ${x.subject.name} ${x.section?.name ?? ''}`));
+  check('the teacher does not see 8-B Maths', !teacherExams.some((x) => x.examination.id === sharedExam?.id && x.subject.name === 'Mathematics' && x.section?.id === secB.id));
+  const sharedSheet = sharedMaths ? (await expect('teacher opens the 8-A Maths sheet', teacher, 'GET', `/marks/sheet/${sharedMaths.id}`)).data : null;
+  check('the sheet lists 8-A students', sharedSheet?.students?.length >= 1, sharedSheet?.students?.length);
+
+  await expect('a class list is required', manager, 'POST', `/examinations/${sharedExam?.id}/assessments/class`, { maxMarks: 50 }, 400);
+  await expect('teacher cannot add classes to an exam', teacher, 'POST', `/examinations/${sharedExam?.id}/assessments/class`, { classIds: [class1?.id], maxMarks: 50 }, 403);
+
+  heading('Section-by-section approval');
+  let examSectionView = (await expect('read section progress', admin, 'GET', `/examinations/${sharedExam?.id}/sections`)).data;
+  const sectionRowOf = (view, id) => view?.sections?.find((row) => row.section.id === id);
+  check('the exam covers 1-A, 1-B, 8-A and 8-B', examSectionView?.sections?.length === 4, examSectionView?.sections?.map((row) => `${row.class.name}-${row.section.name}`));
+  check('8-A is not complete yet', sectionRowOf(examSectionView, secA.id)?.complete === false, sectionRowOf(examSectionView, secA.id));
+  await expect('8-A cannot be approved before marks are in', admin, 'POST', `/examinations/${sharedExam?.id}/sections/${secA.id}/verify`, {}, 409);
+  const sharedDetail = (await call(admin, 'GET', `/examinations/${sharedExam?.id}`)).data;
+  for (const item of sharedDetail?.assessments?.filter((x) => x.sectionId === secA.id) ?? []) {
+    await call(admin, 'POST', '/marks/bulk', { assessmentId: item.id, marks: [{ studentId, marksObtained: 40 }, { studentId: newStudent.id, marksObtained: 35 }] });
+    await call(admin, 'POST', '/marks/submit', { assessmentId: item.id });
+  }
+  examSectionView = (await call(admin, 'GET', `/examinations/${sharedExam?.id}/sections`)).data;
+  check('8-A is complete once every subject is submitted', sectionRowOf(examSectionView, secA.id)?.complete === true, sectionRowOf(examSectionView, secA.id));
+  await expect('the Principal does not give the first approval', principal, 'POST', `/examinations/${sharedExam?.id}/sections/${secA.id}/verify`, {}, 403);
+  await expect('School Admin approves 8-A on its own', admin, 'POST', `/examinations/${sharedExam?.id}/sections/${secA.id}/verify`, {});
+  const lockedMaths = sharedDetail?.assessments?.find((x) => x.sectionId === secA.id);
+  const lockedTry = (await call(admin, 'POST', '/marks/bulk', { assessmentId: lockedMaths?.id, marks: [{ studentId, marksObtained: 41 }] })).data;
+  check('marks in an approved section are locked', lockedTry?.saved === 0 && lockedTry.results?.[0]?.error?.includes('already approved'), lockedTry);
+  check('the student cannot see 8-A results before release', !(await call(student, 'GET', '/marks')).data?.some((m) => m.assessment?.examinationId === sharedExam?.id));
+  await expect('the School Admin cannot release', admin, 'POST', `/examinations/${sharedExam?.id}/sections/${secA.id}/release`, {}, 403);
+  const releasedA = (await expect('the Principal releases 8-A', principal, 'POST', `/examinations/${sharedExam?.id}/sections/${secA.id}/release`, {})).data;
+  check('the exam is not fully released while other sections wait', releasedA?.status === 'RELEASED' && releasedA.examReleased === false, releasedA);
+  const studentMarks = (await call(student, 'GET', '/marks')).data ?? [];
+  check('the 8-A student now sees the released marks', studentMarks.some((m) => m.assessment?.examinationId === sharedExam?.id && Number(m.marksObtained) === 40), studentMarks.length);
+  const studentCards = (await call(student, 'GET', `/students/${studentId}/report-cards`)).data ?? [];
+  check('the report card includes the released exam', studentCards.some((c) => c.examination.id === sharedExam?.id), studentCards.map((c) => c.examination.name));
+  check('the student sees the exam in the exam list', (await call(student, 'GET', '/examinations')).data?.some((e) => e.id === sharedExam?.id));
+  const teacherView = (await call(teacher, 'GET', '/marks/my-assessments')).data ?? [];
+  check('the teacher sees 8-A Maths as released', teacherView.some((x) => x.examination.id === sharedExam?.id && x.section?.id === secA.id && x.subject.name === 'Mathematics' && x.status === 'RELEASED'), teacherView.filter((x) => x.examination.id === sharedExam?.id).map((x) => `${x.subject.name} ${x.section?.name} ${x.status}`));
+  const bulkApproved = (await expect('School Admin approves every ready section', admin, 'POST', `/examinations/${sharedExam?.id}/sections/verify-ready`, {})).data;
+  check('the three empty sections are approved', bulkApproved?.approved?.length === 3, bulkApproved);
+  const oneBId = examSectionView?.sections?.find((row) => row.class.id === class1?.id && row.section.name === 'B')?.section.id;
+  await expect('send 1-B back', principal, 'POST', `/examinations/${sharedExam?.id}/sections/${oneBId}/reject`, {});
+  await expect('approve the ready sections again', admin, 'POST', `/examinations/${sharedExam?.id}/sections/verify-ready`, {});
+  const bulkReleased = (await expect('the Principal releases every approved section', principal, 'POST', `/examinations/${sharedExam?.id}/sections/release-approved`, {})).data;
+  check('the remaining three sections are released', bulkReleased?.released?.length === 3, bulkReleased);
+  const finished = (await call(admin, 'GET', `/examinations/${sharedExam?.id}`)).data;
+  check('the exam is released once every section is', finished?.status === 'RELEASED', finished?.status);
 
   await expect('Section B with exam subjects cannot be deleted', manager, 'DELETE', `/academics/sections/${oneB?.id}`, undefined, 409);
   const class2 = (await expect('create Class 2', manager, 'POST', '/classes', { academicYearId: year.id, name: 'Class 2', sortOrder: 2 })).data;
