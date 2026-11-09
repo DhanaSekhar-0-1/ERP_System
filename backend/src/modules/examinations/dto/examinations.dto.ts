@@ -125,6 +125,27 @@ export class CreateSlipTestDto {
   examDate?: string;
 }
 
+/** Adds every switched-on subject of every section in a class to an exam. */
+export class AddClassSubjectsDto {
+  @IsUUID()
+  classId!: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  maxMarks!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  passMarks?: number;
+
+  @IsOptional()
+  @IsDateString()
+  examDate?: string;
+}
+
 export class ExamNoteDto {
   @IsOptional()
   @IsString()

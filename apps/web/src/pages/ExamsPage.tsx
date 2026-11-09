@@ -6,7 +6,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { useActiveYear } from '../hooks';
 import { buttonClass, Card, errorText, ghostButtonClass, inputClass, Message, PageHeader } from '../components/ui';
-import { Dialog, Field } from './TeachersPage';
+import { Dialog, Field } from '../components/Dialog';
 
 const TYPE_LABELS: Record<ExamType, string> = {
   FA1: 'FA1 (minor)',
@@ -94,16 +94,17 @@ function AddSubjectDialog({ exam, onClose }: { exam: Examination; onClose(): voi
   const [subjectId, setSubjectId] = useState('');
   const [maxMarks, setMaxMarks] = useState('');
   const [passMarks, setPassMarks] = useState('');
+  const [sectionId, setSectionId] = useState('');
+  const [wholeClass, setWholeClass] = useState(true);
   const classes = useQuery({ queryKey: ['classes', exam.academicYearId], queryFn: () => api.classes(exam.academicYearId) });
-  const subjects = useQuery({ queryKey: ['subjects', exam.academicYearId], queryFn: () => api.subjects(exam.academicYearId) });
+  const sections = useQuery({ queryKey: ['sections', classId], queryFn: () => api.sections(classId), enabled: Boolean(classId) && !wholeClass });
+  const subjects = useQuery({ queryKey: ['section-subjects', sectionId], queryFn: () => api.sectionSubjects(sectionId), enabled: Boolean(sectionId) && !wholeClass });
   const add = useMutation({
-    mutationFn: () =>
-      api.addAssessment(exam.id, {
-        classId,
-        subjectId,
-        maxMarks: Number(maxMarks),
-        passMarks: passMarks ? Number(passMarks) : undefined,
-      }),
+    mutationFn: async () => {
+      const marks = { maxMarks: Number(maxMarks), passMarks: passMarks ? Number(passMarks) : undefined };
+      if (wholeClass) return api.addClassSubjects(exam.id, { classId, ...marks });
+      return api.addAssessment(exam.id, { classId, subjectId, ...marks });
+    },
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ['exams'] });
       await client.invalidateQueries({ queryKey: ['verification', exam.id] });
@@ -122,23 +123,45 @@ function AddSubjectDialog({ exam, onClose }: { exam: Examination; onClose(): voi
       footer={
         <>
           <button type="button" onClick={onClose} className={ghostButtonClass}>Cancel</button>
-          <button disabled={add.isPending} className={buttonClass}>{add.isPending ? 'Saving…' : 'Add subject'}</button>
+          <button disabled={add.isPending} className={buttonClass}>{add.isPending ? 'Saving…' : wholeClass ? 'Add all subjects' : 'Add subject'}</button>
         </>
       }
     >
+      <div role="radiogroup" aria-label="What to add" className="grid gap-2 sm:grid-cols-2">
+        {[
+          { value: true, label: 'Whole class', hint: 'Every subject that is on, in every section' },
+          { value: false, label: 'One subject', hint: 'A single subject of one section' },
+        ].map((option) => (
+          <label key={option.label} className={'cursor-pointer rounded-xl border p-3 text-sm ' + (wholeClass === option.value ? 'border-brand bg-brand-soft' : 'border-line')}>
+            <input type="radio" name="add-mode" className="sr-only" checked={wholeClass === option.value} onChange={() => setWholeClass(option.value)} />
+            <span className="block font-bold">{option.label}</span>
+            <span className="text-xs text-muted">{option.hint}</span>
+          </label>
+        ))}
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Class">
-          <select required value={classId} onChange={(event) => setClassId(event.target.value)} className={inputClass}>
+          <select required value={classId} onChange={(event) => { setClassId(event.target.value); setSectionId(''); setSubjectId(''); }} className={inputClass}>
             <option value="">Choose a class</option>
             {classes.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </Field>
-        <Field label="Subject">
-          <select required value={subjectId} onChange={(event) => setSubjectId(event.target.value)} className={inputClass}>
-            <option value="">Choose a subject</option>
-            {subjects.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-        </Field>
+        {!wholeClass && (
+          <Field label="Section">
+            <select required value={sectionId} disabled={!classId} onChange={(event) => { setSectionId(event.target.value); setSubjectId(''); }} className={inputClass}>
+              <option value="">Choose a section</option>
+              {sections.data?.map((item) => <option key={item.id} value={item.id}>Section {item.name}</option>)}
+            </select>
+          </Field>
+        )}
+        {!wholeClass && (
+          <Field label="Subject">
+            <select required value={subjectId} disabled={!sectionId} onChange={(event) => setSubjectId(event.target.value)} className={inputClass}>
+              <option value="">Choose a subject</option>
+              {subjects.data?.filter((item) => item.isEnabled).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label="Maximum marks">
           <input required type="number" min={1} step="0.5" value={maxMarks} onChange={(event) => setMaxMarks(event.target.value)} className={inputClass} />
         </Field>

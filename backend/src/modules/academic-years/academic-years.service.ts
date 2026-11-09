@@ -216,12 +216,19 @@ export class AcademicYearsService {
         const subjects = await transaction.subject.findMany({ where: { academicYearId: source.id } });
         const subjectMap = new Map<string, string>();
         for (const subject of subjects) {
+          // Section subjects follow their section; year-level subjects stay year-level.
+          const sectionId = subject.sectionId ? sectionMap.get(subject.sectionId) : null;
+          if (subject.sectionId && !sectionId) continue;
           const copy = await transaction.subject.create({
             data: {
               schoolId: context.schoolId,
               academicYearId: target.id,
+              sectionId,
               name: subject.name,
               code: subject.code,
+              isOptional: subject.isOptional,
+              isEnabled: subject.isEnabled,
+              sortOrder: subject.sortOrder,
             },
           });
           subjectMap.set(subject.id, copy.id);
@@ -233,6 +240,7 @@ export class AcademicYearsService {
             where: { academicYearId: source.id },
           });
           for (const assignment of assignments) {
+            if (!subjectMap.has(assignment.subjectId)) continue;
             await transaction.staffAssignment.create({
               data: {
                 schoolId: context.schoolId,
@@ -241,10 +249,24 @@ export class AcademicYearsService {
                 classId: classMap.get(assignment.classId) as string,
                 sectionId: assignment.sectionId ? sectionMap.get(assignment.sectionId) ?? null : null,
                 subjectId: subjectMap.get(assignment.subjectId) as string,
-                isClassTeacher: assignment.isClassTeacher,
               },
             });
             assignmentsCopied += 1;
+          }
+          const classTeachers = await transaction.classTeacher.findMany({
+            where: { academicYearId: source.id },
+          });
+          for (const classTeacher of classTeachers) {
+            const sectionId = sectionMap.get(classTeacher.sectionId);
+            if (!sectionId) continue;
+            await transaction.classTeacher.create({
+              data: {
+                schoolId: context.schoolId,
+                academicYearId: target.id,
+                sectionId,
+                staffId: classTeacher.staffId,
+              },
+            });
           }
         }
 

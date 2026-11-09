@@ -163,11 +163,10 @@ async function main(): Promise<void> {
     update: { isActive: true, isClosed: false },
   });
   const academicYearId = year.id;
-  const subject = await prisma.subject.upsert({
-    where: { schoolId_academicYearId_code: { schoolId, academicYearId, code: 'GEN' } },
-    create: { schoolId, academicYearId, name: 'General Studies', code: 'GEN' },
-    update: {},
-  });
+  // A year-level subject (no section) used for the demo teachers' assignments.
+  const subject =
+    (await prisma.subject.findFirst({ where: { schoolId, academicYearId, sectionId: null, code: 'GEN' } })) ??
+    (await prisma.subject.create({ data: { schoolId, academicYearId, name: 'General Studies', code: 'GEN' } }));
 
   // Students and their enrollments, section by section.
   const days = schoolDays(SCHOOL_DAYS);
@@ -201,10 +200,14 @@ async function main(): Promise<void> {
           classId: schoolClass.id,
           sectionId: section.id,
           subjectId: subject.id,
-          isClassTeacher: true,
         },
       });
     }
+    await prisma.classTeacher.upsert({
+      where: { sectionId: section.id },
+      create: { schoolId, academicYearId, sectionId: section.id, staffId },
+      update: { staffId },
+    });
 
     const enrollments: { id: string; studentId: string; index: number }[] = [];
     for (let roll = 1; roll <= 14; roll += 1) {

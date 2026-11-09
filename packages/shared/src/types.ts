@@ -229,6 +229,109 @@ export interface ExamVerification {
   }[];
 }
 
+export interface StaffSummary {
+  staffId: string;
+  employeeNo: string;
+  displayName: string;
+}
+
+export interface ClassCard {
+  id: string;
+  name: string;
+  sortOrder: number;
+  academicYearId: string;
+  sections: number;
+  subjects: number;
+  teachers: number;
+  students: number;
+}
+
+export interface SectionSubject {
+  id: string;
+  name: string;
+  code: string;
+  isOptional: boolean;
+  isEnabled: boolean;
+  teachers: (StaffSummary & { assignmentId: string })[];
+}
+
+export interface ClassDetail {
+  id: string;
+  name: string;
+  sortOrder: number;
+  academicYearId: string;
+  sections: {
+    id: string;
+    name: string;
+    students: number;
+    classTeacher: StaffSummary | null;
+    subjects: SectionSubject[];
+  }[];
+}
+
+export interface SectionAssignments {
+  sectionId: string;
+  sectionName: string;
+  class: { id: string; name: string };
+  classTeacher: StaffSummary | null;
+  subjects: { subjectId: string; name: string; isOptional: boolean; teacher: StaffSummary | null }[];
+}
+
+export interface DefaultSubject {
+  name: string;
+  code: string;
+  isOptional: boolean;
+}
+
+export interface SectionEnrollment {
+  id: string;
+  rollNumber: string | null;
+  student: StudentName;
+}
+
+export interface MyTeaching {
+  academicYear: { id: string; name: string } | null;
+  subjects: {
+    assignmentId: string;
+    class: { id: string; name: string };
+    section: { id: string; name: string } | null;
+    subject: { id: string; name: string; code: string };
+    students: number | null;
+  }[];
+  classTeacherOf: { section: { id: string; name: string }; class: { id: string; name: string }; students: number }[];
+}
+
+export interface MyAssessment {
+  id: string;
+  examination: { id: string; name: string; type: ExamType; status: ExamStatus };
+  class: { id: string; name: string };
+  section: { id: string; name: string } | null;
+  subject: { id: string; name: string };
+  maxMarks: number;
+  passMarks: number | null;
+  students: number | null;
+  entered: number;
+  submitted: number;
+}
+
+export interface MarkSheet {
+  assessment: {
+    id: string;
+    examination: { id: string; name: string; type: ExamType; status: ExamStatus };
+    class: { id: string; name: string };
+    section: { id: string; name: string } | null;
+    subject: { id: string; name: string };
+    maxMarks: number;
+    passMarks: number | null;
+  };
+  students: {
+    student: StudentName;
+    section: string;
+    rollNumber: string | null;
+    mark: { id: string; marksObtained: number | null; isAbsent: boolean; status: 'DRAFT' | 'SUBMITTED' } | null;
+  }[];
+}
+
 export interface Paged<T> {
   items: T[];
   total: number;

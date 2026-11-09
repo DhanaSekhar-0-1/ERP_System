@@ -12,6 +12,7 @@ import { CurrentUser } from '../../common/auth/current-user.decorator';
 import { RequirePermissions } from '../../common/auth/permissions.decorator';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import {
+  AddClassSubjectsDto,
   BulkMarksDto,
   CreateAssessmentDto,
   CreateExaminationDto,
@@ -80,6 +81,16 @@ export class ExaminationsController {
     @Body() input: CreateAssessmentDto,
   ) {
     return this.exams.addAssessment(user, examinationId, input);
+  }
+
+  @Post(':examinationId/assessments/class')
+  @RequirePermissions('examinations:manage')
+  addClassSubjects(
+    @CurrentUser() user: SupabaseUser,
+    @Param('examinationId', ParseUUIDPipe) examinationId: string,
+    @Body() input: AddClassSubjectsDto,
+  ) {
+    return this.exams.addClassSubjects(user, examinationId, input);
   }
 
   @Get(':examinationId/verification')
@@ -160,6 +171,23 @@ export class MarksController {
   @RequirePermissions('marks:read')
   findMany(@CurrentUser() user: SupabaseUser, @Query() query: MarksQueryDto) {
     return this.exams.findMarks(user, query);
+  }
+
+  /** Exam subjects the signed-in teacher can enter marks for. */
+  @Get('my-assessments')
+  @RequirePermissions('marks:manage')
+  myAssessments(@CurrentUser() user: SupabaseUser) {
+    return this.exams.myAssessments(user);
+  }
+
+  /** The students of an exam subject that the caller can see, with any marks entered. */
+  @Get('sheet/:assessmentId')
+  @RequirePermissions('marks:read')
+  sheet(
+    @CurrentUser() user: SupabaseUser,
+    @Param('assessmentId', ParseUUIDPipe) assessmentId: string,
+  ) {
+    return this.exams.markSheet(user, assessmentId);
   }
 
   @Post()

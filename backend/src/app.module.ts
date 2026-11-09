@@ -11,6 +11,7 @@ import { ClassesModule } from './modules/classes/classes.module';
 import { SectionsModule } from './modules/sections/sections.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { SubjectsModule } from './modules/subjects/subjects.module';
+import { AcademicsModule } from './modules/academics/academics.module';
 import { StaffAssignmentsModule } from './modules/staff-assignments/staff-assignments.module';
 import { EnrollmentsModule } from './modules/enrollments/enrollments.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
@@ -53,6 +54,7 @@ import { SyncModule } from './modules/sync/sync.module';
     SectionsModule,
     StaffModule,
     SubjectsModule,
+    AcademicsModule,
     StaffAssignmentsModule,
     EnrollmentsModule,
     AttendanceModule,

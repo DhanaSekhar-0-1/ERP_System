@@ -10,7 +10,12 @@ export default function StaffLayout() {
     <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: colors.primary }}>
       <Tabs.Screen
         name="index"
-        options={{ title: 'Classes', tabBarIcon: tabIcon('grid') }}
+        options={{ title: 'Attendance', tabBarIcon: tabIcon('grid') }}
+      />
+      <Tabs.Screen
+        name="subjects"
+        options={{ title: 'Subjects', tabBarIcon: tabIcon('book') }}
+
       />
       <Tabs.Screen
         name="leaves"

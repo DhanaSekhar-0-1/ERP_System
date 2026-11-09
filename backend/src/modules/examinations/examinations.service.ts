@@ -14,6 +14,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { ApprovalEngine } from '../../common/approvals/approval-engine.service';
 import { NotifyService } from '../../common/notify/notify.service';
 import {
+  AddClassSubjectsDto,
   BulkMarksDto,
   CreateAssessmentDto,
   CreateExaminationDto,
@@ -341,11 +342,20 @@ export class ExaminationsService implements OnModuleInit {
     if (input.passMarks !== undefined && input.passMarks > input.maxMarks) {
       throw new BadRequestException('Pass marks cannot exceed maximum marks');
     }
+    // A section's own subject is examined in that section only.
+    let sectionId: string | null = null;
+    if (subject.sectionId) {
+      const section = await this.database.section.findFirst({ where: { id: subject.sectionId, classId: input.classId } });
+      if (!section) throw new BadRequestException('This subject belongs to a section of another class');
+      if (!subject.isEnabled) throw new BadRequestException('This subject is switched off for its section');
+      sectionId = section.id;
+    }
     return this.database.assessment.create({
       data: {
         schoolId: context.schoolId,
         examinationId,
         classId: input.classId,
+        sectionId,
         subjectId: input.subjectId,
         maxMarks: input.maxMarks,
         passMarks: input.passMarks ?? null,
@@ -353,6 +363,167 @@ export class ExaminationsService implements OnModuleInit {
       },
       include: { class: true, subject: true },
     });
+  }
+
+  /** Adds every switched-on subject of each section in the class, skipping ones already added. */
+  async addClassSubjects(authUser: SupabaseUser, examinationId: string, input: AddClassSubjectsDto) {
+    const context = await this.leader(authUser);
+    const exam = await this.scopedExam(context, examinationId);
+    if (exam.status !== 'DRAFT') {
+      throw new ConflictException('Subjects can be added only to draft examinations');
+    }
+    if (exam.type === 'SLIP_TEST') {
+      throw new BadRequestException('Slip tests cover one subject');
+    }
+    const schoolClass = await this.database.schoolClass.findFirst({
+      where: { id: input.classId, schoolId: context.schoolId, academicYearId: exam.academicYearId },
+      include: {
+        sections: {
+          where: { isArchived: false },
+          include: { subjects: { where: { isEnabled: true } } },
+        },
+      },
+    });
+    if (!schoolClass) throw new NotFoundException('Class not found in the examination year');
+    if (exam.type === 'PRE_PUBLIC' && !this.isClassTen(schoolClass)) {
+      throw new BadRequestException('Pre-public exams are only for Class 10');
+    }
+    if (input.passMarks !== undefined && input.passMarks > input.maxMarks) {
+      throw new BadRequestException('Pass marks cannot exceed maximum marks');
+    }
+    const rows = schoolClass.sections.flatMap((section) =>
+      section.subjects.map((subject) => ({
+        schoolId: context.schoolId,
+        examinationId,
+        classId: schoolClass.id,
+        sectionId: section.id,
+        subjectId: subject.id,
+        maxMarks: input.maxMarks,
+        passMarks: input.passMarks ?? null,
+        examDate: input.examDate ? new Date(input.examDate) : null,
+      })),
+    );
+    if (!rows.length) throw new BadRequestException('This class has no subjects switched on');
+    const created = await this.database.assessment.createMany({ data: rows, skipDuplicates: true });
+    return { added: created.count, skipped: rows.length - created.count };
+  }
+
+  /** Draft exam subjects in the teacher's own classes, sections and subjects. */
+  async myAssessments(authUser: SupabaseUser) {
+    const context = await this.access.schoolContext(authUser);
+    if (!context.staffId) return [];
+    const assignments = await this.database.staffAssignment.findMany({
+      where: { staffId: context.staffId, academicYear: { isActive: true } },
+    });
+    if (!assignments.length) return [];
+    const assessments = await this.database.assessment.findMany({
+      where: {
+        schoolId: context.schoolId,
+        examination: { status: 'DRAFT' },
+        OR: assignments.map((assignment) => ({
+          classId: assignment.classId,
+          subjectId: assignment.subjectId,
+          ...(assignment.sectionId
+            ? { OR: [{ sectionId: assignment.sectionId }, { sectionId: null }] }
+            : {}),
+        })),
+      },
+      orderBy: [{ createdAt: 'desc' }],
+      include: {
+        examination: { select: { id: true, name: true, type: true, status: true } },
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        subject: { select: { id: true, name: true } },
+        marks: { select: { status: true, studentId: true } },
+      },
+    });
+    const result = [];
+    for (const assessment of assessments) {
+      const students = await this.manageableStudentIds(context, assessment);
+      const ids = students === true ? null : new Set(students);
+      const mine = assessment.marks.filter((mark) => !ids || ids.has(mark.studentId));
+      result.push({
+        id: assessment.id,
+        examination: assessment.examination,
+        class: assessment.class,
+        section: assessment.section,
+        subject: assessment.subject,
+        maxMarks: Number(assessment.maxMarks),
+        passMarks: assessment.passMarks === null ? null : Number(assessment.passMarks),
+        students: ids ? ids.size : null,
+        entered: mine.length,
+        submitted: mine.filter((mark) => mark.status === 'SUBMITTED').length,
+      });
+    }
+    return result;
+  }
+
+  /** Students the caller may enter marks for in one exam subject, with their current marks. */
+  async markSheet(authUser: SupabaseUser, assessmentId: string) {
+    const context = await this.access.schoolContext(authUser);
+    if (!context.isLeader && !context.isTeacher) {
+      throw new ForbiddenException('Only teachers and school leaders can open a mark sheet');
+    }
+    const assessment = await this.database.assessment.findFirst({
+      where: { id: assessmentId, schoolId: context.schoolId },
+      include: {
+        examination: { select: { id: true, name: true, type: true, status: true, academicYearId: true } },
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        subject: { select: { id: true, name: true } },
+      },
+    });
+    if (!assessment) throw new NotFoundException('Exam subject not found');
+    const allowed = await this.manageableStudentIds(context, assessment);
+    if (allowed !== true && !allowed.length) {
+      throw new ForbiddenException('You are not assigned to this class and subject');
+    }
+    const enrollments = await this.database.enrollment.findMany({
+      where: {
+        classId: assessment.classId,
+        academicYearId: assessment.examination.academicYearId,
+        status: { in: ['ACTIVE', 'PROMOTED'] },
+        ...(assessment.sectionId ? { sectionId: assessment.sectionId } : {}),
+        ...(allowed === true ? {} : { studentId: { in: allowed } }),
+      },
+      orderBy: [{ section: { name: 'asc' } }, { rollNumber: 'asc' }],
+      select: {
+        rollNumber: true,
+        section: { select: { name: true } },
+        student: { select: { id: true, firstName: true, lastName: true, admissionNo: true } },
+      },
+    });
+    const marks = await this.database.mark.findMany({
+      where: { assessmentId, studentId: { in: enrollments.map((row) => row.student.id) } },
+    });
+    const byStudent = new Map(marks.map((mark) => [mark.studentId, mark]));
+    return {
+      assessment: {
+        id: assessment.id,
+        examination: assessment.examination,
+        class: assessment.class,
+        section: assessment.section,
+        subject: assessment.subject,
+        maxMarks: Number(assessment.maxMarks),
+        passMarks: assessment.passMarks === null ? null : Number(assessment.passMarks),
+      },
+      students: enrollments.map((row) => {
+        const mark = byStudent.get(row.student.id);
+        return {
+          student: row.student,
+          section: row.section.name,
+          rollNumber: row.rollNumber,
+          mark: mark
+            ? {
+                id: mark.id,
+                marksObtained: mark.marksObtained === null ? null : Number(mark.marksObtained),
+                isAbsent: mark.isAbsent,
+                status: mark.status,
+              }
+            : null,
+        };
+      }),
+    };
   }
 
   async transition(authUser: SupabaseUser, examinationId: string, action: string, note?: string) {

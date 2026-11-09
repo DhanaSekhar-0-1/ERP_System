@@ -73,7 +73,7 @@ export default function StaffHome() {
       />
       <View style={styles.list}>
         {sections.isError && <Empty tone="error" text={errorText(sections.error)} />}
-        {sections.data?.length === 0 && <Empty text="You are not assigned to any section yet." />}
+        {sections.data?.length === 0 && <Empty text="You are not class teacher of any section, so there is no attendance to mark. Your subjects are in the Subjects tab." />}
         {sections.data?.map((section) => <SectionCard key={section.id} section={section} />)}
       </View>
     </ScrollView>

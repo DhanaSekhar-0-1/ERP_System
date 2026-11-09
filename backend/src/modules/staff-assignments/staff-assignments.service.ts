@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -44,11 +45,13 @@ export class StaffAssignmentsService {
             classId: input.classId,
             sectionId: input.sectionId ?? null,
             subjectId: input.subjectId,
-            isClassTeacher: input.isClassTeacher ?? false,
             effectiveFrom: input.effectiveFrom ? new Date(input.effectiveFrom) : null,
           },
           include: INCLUDE,
         });
+        if (input.isClassTeacher) {
+          await this.setClassTeacher(transaction, context, input.sectionId, input.staffId, input.academicYearId);
+        }
         await this.audit.record(
           context,
           {
@@ -59,7 +62,7 @@ export class StaffAssignmentsService {
           },
           transaction,
         );
-        return assignment;
+        return { ...assignment, isClassTeacher: Boolean(input.isClassTeacher) };
       });
     } catch (error) {
       if (this.isUniqueError(error)) {
@@ -84,11 +87,12 @@ export class StaffAssignmentsService {
     if (!context.isLeader) {
       where.staffId = context.staffId ?? '00000000-0000-0000-0000-000000000000';
     }
-    return this.database.staffAssignment.findMany({
+    const assignments = await this.database.staffAssignment.findMany({
       where,
       orderBy: [{ createdAt: 'asc' }],
       include: INCLUDE,
     });
+    return this.withClassTeacher(assignments);
   }
 
   async reassign(
@@ -113,11 +117,17 @@ export class StaffAssignmentsService {
         data: {
           staffId: next.staffId,
           sectionId: next.sectionId ?? null,
-          isClassTeacher: input.isClassTeacher,
           effectiveFrom: input.effectiveFrom ? new Date(input.effectiveFrom) : undefined,
         },
         include: INCLUDE,
       });
+      if (input.isClassTeacher === true) {
+        await this.setClassTeacher(transaction, context, next.sectionId, next.staffId, next.academicYearId);
+      } else if (input.isClassTeacher === false && existing.sectionId) {
+        await transaction.classTeacher.deleteMany({
+          where: { sectionId: existing.sectionId, staffId: existing.staffId },
+        });
+      }
       await this.audit.record(
         context,
         {
@@ -130,7 +140,8 @@ export class StaffAssignmentsService {
         },
         transaction,
       );
-      return updated;
+      const [withFlag] = await this.withClassTeacher([updated], transaction);
+      return withFlag;
     });
   }
 
@@ -183,6 +194,45 @@ export class StaffAssignmentsService {
     if (!staff || !academicYear || !schoolClass || !subject || !section) {
       throw new NotFoundException('Staff, academic year, class, section, or subject not found');
     }
+    if (subject.sectionId && subject.sectionId !== input.sectionId) {
+      throw new BadRequestException('This subject belongs to a different section');
+    }
+    if (!subject.isEnabled) {
+      throw new BadRequestException('This subject is switched off for the section');
+    }
+  }
+
+  /** Makes the staff member the class teacher of a section, replacing any current one. */
+  private async setClassTeacher(
+    transaction: Prisma.TransactionClient,
+    context: SchoolContext,
+    sectionId: string | null | undefined,
+    staffId: string,
+    academicYearId: string,
+  ) {
+    if (!sectionId) {
+      throw new BadRequestException('Choose a section to make this teacher its class teacher');
+    }
+    await transaction.classTeacher.upsert({
+      where: { sectionId },
+      create: { schoolId: context.schoolId, academicYearId, sectionId, staffId },
+      update: { staffId },
+    });
+  }
+
+  private async withClassTeacher<T extends { staffId: string; sectionId: string | null }>(
+    assignments: T[],
+    client: Prisma.TransactionClient | DatabaseService = this.database,
+  ): Promise<(T & { isClassTeacher: boolean })[]> {
+    const sectionIds = [...new Set(assignments.map((item) => item.sectionId).filter((id): id is string => Boolean(id)))];
+    const classTeachers = sectionIds.length
+      ? await client.classTeacher.findMany({ where: { sectionId: { in: sectionIds } } })
+      : [];
+    const bySection = new Map(classTeachers.map((row) => [row.sectionId, row.staffId]));
+    return assignments.map((item) => ({
+      ...item,
+      isClassTeacher: Boolean(item.sectionId) && bySection.get(item.sectionId as string) === item.staffId,
+    }));
   }
 
   private async scoped(context: SchoolContext, assignmentId: string) {

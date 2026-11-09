@@ -10,7 +10,15 @@ import type {
   AuthTokens,
   BulkResult,
   Child,
+  ClassCard,
+  ClassDetail,
+  DefaultSubject,
   ExamType,
+  MarkSheet,
+  MyAssessment,
+  MyTeaching,
+  SectionAssignments,
+  SectionEnrollment,
   ExamVerification,
   Examination,
   LeaveStatus,
@@ -20,6 +28,7 @@ import type {
   PrincipalDashboard,
   SchoolClass,
   Section,
+  SectionSubject,
   Staff,
   StaffAssignment,
   SectionStudent,
@@ -200,6 +209,55 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
 
     myChildren: () => call<Child[]>('GET', '/me/children'),
 
+    classCards: (academicYearId: string) =>
+      call<ClassCard[]>('GET', `/academics/classes${query({ academicYearId })}`),
+    classDetail: (classId: string) => call<ClassDetail>('GET', `/academics/classes/${classId}`),
+    createClass: (input: { academicYearId: string; name: string; sortOrder?: number }) =>
+      call<SchoolClass>('POST', '/classes', input),
+    updateClass: (classId: string, input: { name?: string; sortOrder?: number }) =>
+      call<SchoolClass>('PATCH', `/classes/${classId}`, input),
+    deleteClass: (classId: string) => call<unknown>('DELETE', `/academics/classes/${classId}`),
+    createSection: (input: { academicYearId: string; classId: string; name: string }) =>
+      call<Section>('POST', '/sections', input),
+    renameSection: (sectionId: string, name: string) => call<Section>('PATCH', `/sections/${sectionId}`, { name }),
+    deleteSection: (sectionId: string) => call<unknown>('DELETE', `/academics/sections/${sectionId}`),
+    sectionStudents: (sectionId: string) =>
+      call<SectionEnrollment[]>('GET', `/academics/sections/${sectionId}/students`),
+    sectionSubjects: (sectionId: string) =>
+      call<SectionSubject[]>('GET', `/academics/sections/${sectionId}/subjects`),
+    addSectionSubject: (sectionId: string, input: { name: string; code?: string; isOptional?: boolean }) =>
+      call<SectionSubject>('POST', `/academics/sections/${sectionId}/subjects`, input),
+    updateSubject: (subjectId: string, input: { name?: string; code?: string; isOptional?: boolean; isEnabled?: boolean }) =>
+      call<SectionSubject>('PATCH', `/academics/subjects/${subjectId}`, input),
+    deleteSubject: (subjectId: string) => call<unknown>('DELETE', `/academics/subjects/${subjectId}`),
+    setSubjectTeacher: (subjectId: string, staffId: string | null) =>
+      call<unknown>('PUT', `/academics/subjects/${subjectId}/teacher`, staffId ? { staffId } : {}),
+    setClassTeacher: (sectionId: string, staffId: string | null) =>
+      call<unknown>('PUT', `/academics/sections/${sectionId}/class-teacher`, staffId ? { staffId } : {}),
+    teacherAssignments: (academicYearId: string) =>
+      call<SectionAssignments[]>('GET', `/academics/assignments${query({ academicYearId })}`),
+    defaultSubjects: () => call<DefaultSubject[]>('GET', '/academics/default-subjects'),
+    saveDefaultSubjects: (subjects: { name: string; code?: string; isOptional: boolean }[]) =>
+      call<DefaultSubject[]>('PUT', '/academics/default-subjects', { subjects }),
+
+    myTeaching: () => call<MyTeaching>('GET', '/academics/my-teaching'),
+    myAssessments: () => call<MyAssessment[]>('GET', '/marks/my-assessments'),
+    markSheet: (assessmentId: string) => call<MarkSheet>('GET', `/marks/sheet/${assessmentId}`),
+    saveMarks: (
+      assessmentId: string,
+      marks: { studentId: string; marksObtained?: number; isAbsent?: boolean }[],
+    ) => call<{ saved: number }>('POST', '/marks/bulk', { assessmentId, marks }),
+    submitMarks: (assessmentId: string) => call<unknown>('POST', '/marks/submit', { assessmentId }),
+    createSlipTest: (input: {
+      name: string;
+      classId: string;
+      sectionId?: string;
+      subjectId: string;
+      maxMarks: number;
+      passMarks?: number;
+      examDate?: string;
+    }) => call<Examination>('POST', '/examinations/slip-tests', input),
+
     academicYears: () => call<AcademicYear[]>('GET', '/academic-years'),
     classes: (academicYearId: string) => call<SchoolClass[]>('GET', `/classes${query({ academicYearId })}`),
     sections: (classId: string) => call<Section[]>('GET', `/sections${query({ classId })}`),
@@ -232,6 +290,8 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
       call<unknown>('POST', `/examinations/${examinationId}/assessments`, input),
     examVerification: (examinationId: string) =>
       call<ExamVerification>('GET', `/examinations/${examinationId}/verification`),
+    addClassSubjects: (examinationId: string, input: { classId: string; maxMarks: number; passMarks?: number }) =>
+      call<{ added: number; skipped: number }>('POST', `/examinations/${examinationId}/assessments/class`, input),
     examAction: (examinationId: string, action: 'verify' | 'reject' | 'release') =>
       call<Examination>('POST', `/examinations/${examinationId}/${action}`, {}),
   };

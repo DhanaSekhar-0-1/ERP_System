@@ -2,7 +2,7 @@ import { Smartphone } from 'lucide-react';
 import { useAuth } from '../auth';
 import { ghostButtonClass } from '../components/ui';
 
-/** Teachers, students and parents use the mobile app; this portal is for school leaders. */
+/** Students and parents use the mobile app; this portal is for school leaders and teachers. */
 export function MobileOnlyPage() {
   const { user, signOut } = useAuth();
   return (
@@ -13,7 +13,7 @@ export function MobileOnlyPage() {
         </span>
         <h1 className="text-2xl font-extrabold">Hi {user?.displayName}, please use the mobile app</h1>
         <p className="mt-2 mb-6 text-sm text-muted">
-          This web portal is for principals and school admins. Your attendance and classes are in the mobile app.
+          This web portal is for school leaders and teachers. Your attendance and classes are in the mobile app.
         </p>
         <button onClick={() => void signOut()} className={ghostButtonClass}>
           Sign out

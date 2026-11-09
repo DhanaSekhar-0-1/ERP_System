@@ -239,6 +239,7 @@ model School {
   guardians           Guardian[]
   staff               StaffProfile[]
   assignments         StaffAssignment[]
+  classTeachers       ClassTeacher[]
   enrollments         Enrollment[]
   auditLogs           AuditLog[]
   approvals           ApprovalRequest[]
@@ -304,6 +305,7 @@ model AcademicYear {
   classes           SchoolClass[]
   enrollments       Enrollment[]
   assignments       StaffAssignment[]
+  classTeachers     ClassTeacher[]
   homework          Homework[]
   examinations      Examination[]
   feeStructures     FeeStructure[]
@@ -470,17 +472,26 @@ model Section {
   assignments         StaffAssignment[]
   assessments         Assessment[]
   timetables          Timetable[]
+  subjects            Subject[]
+  classTeacher        ClassTeacher?
 
   @@unique([classId, name])
   @@map("sections")
 }
 
+/// A subject belongs to one section (each section keeps its own copy), or for older data to
+/// the whole academic year (sectionId is null).
 model Subject {
   id             String            @id @default(uuid()) @db.Uuid
   schoolId       String            @map("school_id") @db.Uuid
   academicYearId String            @map("academic_year_id") @db.Uuid
+  sectionId      String?           @map("section_id") @db.Uuid
   name           String
   code           String
+  /// Optional subjects such as Sanskrit can be switched off for a section.
+  isOptional     Boolean           @default(false) @map("is_optional")
+  isEnabled      Boolean           @default(true) @map("is_enabled")
+  sortOrder      Int               @default(0) @map("sort_order")
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @default(now()) @updatedAt @map("updated_at")
   school         School            @relation(fields: [schoolId], references: [id])
@@ -489,8 +500,12 @@ model Subject {
   homework       Homework[]
   assessments    Assessment[]
   timetableSlots TimetableSlot[]
+  section        Section?          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
-  @@unique([schoolId, academicYearId, code])
+  // Year-level subjects (sectionId null) stay unique per school, year and code through a
+  // partial index created in the migration.
+  @@unique([sectionId, code])
+  @@index([schoolId, academicYearId])
   @@map("subjects")
 }
 
@@ -568,6 +583,7 @@ model StaffProfile {
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   school             School              @relation(fields: [schoolId], references: [id])
   staffAssignments   StaffAssignment[]
+  classTeacherOf     ClassTeacher[]
   homework           Homework[]
   timetableSlots     TimetableSlot[]
   leaves             StaffLeave[]
@@ -589,7 +605,6 @@ model StaffAssignment {
   classId        String       @map("class_id") @db.Uuid
   sectionId      String?      @map("section_id") @db.Uuid
   subjectId      String       @map("subject_id") @db.Uuid
-  isClassTeacher Boolean      @default(false) @map("is_class_teacher")
   effectiveFrom  DateTime?    @map("effective_from") @db.Date
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at")
@@ -604,6 +619,25 @@ model StaffAssignment {
   @@index([schoolId, academicYearId, classId])
   @@index([schoolId, staffId])
   @@map("staff_assignments")
+}
+
+/// One class teacher per section, kept apart from subject assignments so a class teacher does
+/// not have to teach a subject in that section.
+model ClassTeacher {
+  id             String       @id @default(uuid()) @db.Uuid
+  schoolId       String       @map("school_id") @db.Uuid
+  academicYearId String       @map("academic_year_id") @db.Uuid
+  sectionId      String       @unique @map("section_id") @db.Uuid
+  staffId        String       @map("staff_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at")
+  school         School       @relation(fields: [schoolId], references: [id])
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  section        Section      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  staff          StaffProfile @relation(fields: [staffId], references: [id])
+
+  @@index([schoolId, staffId])
+  @@map("class_teachers")
 }
 
 model Enrollment {

@@ -1,7 +1,7 @@
 # School ERP Project Status
 
 Single source of truth for what is built, what is partial, and what is known
-to be missing. Last updated 2026-11-06.
+to be missing. Last updated 2026-11-09.
 
 Related documents:
 
@@ -17,7 +17,7 @@ Related documents:
 Web (apps/web, React + Vite) and Mobile (apps/mobile, React Native + Expo)
   -> NestJS 11 REST API (backend/src, prefix /api/v1, ~350 routes)
   -> Prisma 6 (DatabaseService extends PrismaClient)
-  -> Supabase PostgreSQL (11 migrations, ~70 tables)
+  -> Supabase PostgreSQL (12 migrations, ~70 tables)
   -> Supabase Auth (identity) + Supabase Storage (private files, bucket erp-files)
 ```
 
@@ -39,9 +39,9 @@ Shared services in `src/common`:
 
 | Area | Status |
 |---|---|
-| Prisma schema and migrations | Current (11 migrations) |
+| Prisma schema and migrations | Current (12 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 372/372 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 427/427 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
@@ -60,12 +60,12 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 | Organizations, schools, settings | Done | Super Admin limited to own organization; archived schools blocked. In its own school, Super Admin can also register teachers, assign subjects and class teachers, create exams, and give both mark approvals |
 | Users, roles, permissions | Done | Permission overrides, email sync to Supabase, built-in roles cannot be renamed |
 | Academic years | Done | Activate, close, rollover (copy structure, optional promotion), summary |
-| Classes, sections, subjects | Done | Section archive |
-| Staff and assignments | Done | Section-level assignments, class teacher flag, activate/deactivate |
+| Classes, sections, subjects | Done | A new class gets Section A; every new section gets its own copy of the school's default subjects (Sanskrit optional and off). Subjects are per section, so renaming or switching one off affects that section only. Delete is refused while students, exams, homework, fees or timetables depend on it; a class keeps at least one section. Web: Classes & Sections with Sections, Subjects, Teacher assignments and Students tabs, and Settings for the default subjects |
+| Staff and assignments | Done | One teacher per section subject and one class teacher per section (own table). A section subject can be assigned only in its own section while switched on. Teacher access is read from current assignments on every request, so removing one revokes it at once. Web: Teacher Assignments page |
 | Students | Done | Scoped reads, Tier 4 identity changes, archive/restore, history, documents |
 | Guardians and parents | Done | Parent logins, children links, `/me` routes, Tier 1 contact edits |
 | Enrollments | Done | Transfer (Tier 3), promote, withdraw |
-| Attendance | Done | ON_LEAVE status, bulk, 48-hour Tier 2 edits, Tier 3 corrections, summary, CSV export |
+| Attendance | Done | Daily attendance is marked by the section's class teacher or school leadership; subject teachers can view it. ON_LEAVE status, bulk, 48-hour Tier 2 edits, Tier 3 corrections, summary, CSV export |
 | Homework | Done | Section-aware assignment check, grading, return, late flag, archive |
 | Announcements | Done | Audience targeting applied on read; publish notifies the audience |
 | Examinations and marks | Done | Exam types FA1-FA4 (minor), Q1 Quarterly, Q2 Half-yearly, Q3 Annual (major), Pre-public (Class 10 only), slip tests, and Other. Teachers submit marks, the School Admin approves, and the Principal's final approval releases results. Teachers create slip tests for their own sections, and the School Admin's approval releases them. Tier 3/4 corrections, report cards |

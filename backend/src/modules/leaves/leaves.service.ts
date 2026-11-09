@@ -518,16 +518,11 @@ export class LeavesService {
       orderBy: { createdAt: 'desc' },
     });
     if (!enrollment) return [];
-    const assignments = await this.database.staffAssignment.findMany({
-      where: {
-        academicYearId: enrollment.academicYearId,
-        classId: enrollment.classId,
-        isClassTeacher: true,
-        OR: [{ sectionId: null }, { sectionId: enrollment.sectionId }],
-      },
+    const classTeacher = await this.database.classTeacher.findUnique({
+      where: { sectionId: enrollment.sectionId },
       select: { staff: { select: { userId: true } } },
     });
-    return assignments.map((assignment) => assignment.staff.userId);
+    return classTeacher ? [classTeacher.staff.userId] : [];
   }
 
   private async studentLeaveVisibility(context: SchoolContext): Promise<Prisma.StudentLeaveWhereInput> {

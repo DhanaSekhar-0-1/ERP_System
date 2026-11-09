@@ -70,7 +70,7 @@ export class AttendanceService implements OnModuleInit {
 
   async create(authUser: SupabaseUser, input: CreateAttendanceDto) {
     const context = await this.access.schoolContext(authUser);
-    const enrollment = await this.access.assertEnrollmentManageable(context, input.enrollmentId);
+    const enrollment = await this.access.assertAttendanceManageable(context, input.enrollmentId);
     const date = await this.assertValidDate(enrollment, input.attendanceDate);
 
     try {
@@ -121,7 +121,7 @@ export class AttendanceService implements OnModuleInit {
       where: { studentId: student.id, status: 'ACTIVE', academicYear: { isActive: true } },
     });
     if (!active) throw new BadRequestException('This student has no active enrollment');
-    const enrollment = await this.access.assertEnrollmentManageable(context, active.id);
+    const enrollment = await this.access.assertAttendanceManageable(context, active.id);
     if (input.sectionId && enrollment.sectionId !== input.sectionId) {
       throw new BadRequestException(`${student.firstName} belongs to a different section`);
     }
@@ -167,15 +167,12 @@ export class AttendanceService implements OnModuleInit {
     }
   }
 
-  /** Sections the caller can mark in the active year, with progress for one date. */
+  /** Sections the caller can mark in the active year (a teacher's class-teacher sections), with progress for one date. */
   async mySections(authUser: SupabaseUser, query: MySectionsQueryDto) {
     const context = await this.access.schoolContext(authUser);
     let scope: Prisma.SectionWhereInput = {};
     if (!context.isLeader) {
-      const coverage = await this.access.teacherCoverage(context);
-      scope = {
-        OR: [{ id: { in: coverage.sectionIds } }, { classId: { in: coverage.classIds } }],
-      };
+      scope = { id: { in: await this.access.classTeacherSectionIds(context) } };
     }
     const date = new Date(query.attendanceDate.slice(0, 10));
     const sections = await this.database.section.findMany({
@@ -215,7 +212,7 @@ export class AttendanceService implements OnModuleInit {
     const results: { enrollmentId: string; result: string; id?: string; error?: string }[] = [];
     for (const item of input.records) {
       try {
-        const enrollment = await this.access.assertEnrollmentManageable(context, item.enrollmentId);
+        const enrollment = await this.access.assertAttendanceManageable(context, item.enrollmentId);
         const date = await this.assertValidDate(enrollment, input.attendanceDate);
         const existing = await this.database.attendanceRecord.findUnique({
           where: { enrollmentId_attendanceDate: { enrollmentId: enrollment.id, attendanceDate: date } },
@@ -435,8 +432,15 @@ export class AttendanceService implements OnModuleInit {
     });
     if (!section) throw new NotFoundException('Section not found');
     if (!context.isLeader) {
-      const coverage = await this.access.teacherCoverage(context);
-      if (!coverage.sectionIds.includes(sectionId) && !coverage.classIds.includes(section.classId)) {
+      const [coverage, classTeacherOf] = await Promise.all([
+        this.access.teacherCoverage(context),
+        this.access.classTeacherSectionIds(context),
+      ]);
+      if (
+        !classTeacherOf.includes(sectionId) &&
+        !coverage.sectionIds.includes(sectionId) &&
+        !coverage.classIds.includes(section.classId)
+      ) {
         throw new ForbiddenException('You are not assigned to this section');
       }
     }
@@ -503,7 +507,7 @@ export class AttendanceService implements OnModuleInit {
       where: { id: attendanceId, schoolId: context.schoolId },
     });
     if (!record) throw new NotFoundException('Attendance record not found');
-    await this.access.assertEnrollmentManageable(context, record.enrollmentId);
+    await this.access.assertAttendanceManageable(context, record.enrollmentId);
     return record;
   }
 

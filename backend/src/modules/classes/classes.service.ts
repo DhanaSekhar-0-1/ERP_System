@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from '../../common/database/database.service';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
+import { createSectionSubjects } from '../../common/academics/default-subjects';
 import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 
@@ -23,13 +24,21 @@ export class ClassesService {
     }
 
     try {
-      return await this.database.schoolClass.create({
-        data: {
-          schoolId,
-          academicYearId: academicYear.id,
-          name: input.name.trim(),
-          sortOrder: input.sortOrder ?? 0,
-        },
+      // Every class starts with Section A, which gets its own copy of the default subjects.
+      return await this.database.$transaction(async (transaction) => {
+        const schoolClass = await transaction.schoolClass.create({
+          data: {
+            schoolId,
+            academicYearId: academicYear.id,
+            name: input.name.trim(),
+            sortOrder: input.sortOrder ?? 0,
+          },
+        });
+        const section = await transaction.section.create({
+          data: { schoolId, academicYearId: academicYear.id, classId: schoolClass.id, name: 'A' },
+        });
+        await createSectionSubjects(transaction, section);
+        return schoolClass;
       });
     } catch (error) {
       if (this.isUniqueError(error)) {

@@ -179,6 +179,37 @@ export class AccessService {
     return enrollment;
   }
 
+  /** Sections where the caller is the class teacher. */
+  async classTeacherSectionIds(context: SchoolContext): Promise<string[]> {
+    if (!context.staffId) return [];
+    const rows = await this.database.classTeacher.findMany({
+      where: { schoolId: context.schoolId, staffId: context.staffId },
+      select: { sectionId: true },
+    });
+    return rows.map((row) => row.sectionId);
+  }
+
+  /**
+   * Daily attendance is marked by the section's class teacher, or by school leadership.
+   * Subject teachers can view their sections' attendance but not change it.
+   */
+  async assertAttendanceManageable(context: SchoolContext, enrollmentId: string) {
+    const enrollment = await this.database.enrollment.findFirst({
+      where: { id: enrollmentId, schoolId: context.schoolId },
+    });
+    if (!enrollment) {
+      throw new NotFoundException('Enrollment not found');
+    }
+    if (context.isLeader) {
+      return enrollment;
+    }
+    const sections = await this.classTeacherSectionIds(context);
+    if (!context.isTeacher || !sections.includes(enrollment.sectionId)) {
+      throw new ForbiddenException('Only the class teacher of this section can mark its attendance');
+    }
+    return enrollment;
+  }
+
   private async load(authUser: SupabaseUser): Promise<AccessContext> {
     const user = await this.database.user.findUnique({
       where: { authUserId: authUser.id },

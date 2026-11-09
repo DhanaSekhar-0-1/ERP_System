@@ -166,9 +166,12 @@ async function main() {
   await expect('activate academic year', admin, 'POST', `/academic-years/${year.id}/activate`);
   const cls = (await expect('create class', admin, 'POST', '/classes', { academicYearId: year.id, name: 'Class 8', sortOrder: 8 })).data;
   const cls9 = (await expect('create next class', admin, 'POST', '/classes', { academicYearId: year.id, name: 'Class 9', sortOrder: 9 })).data;
-  const secA = (await expect('create section A', admin, 'POST', '/sections', { academicYearId: year.id, classId: cls.id, name: 'A' })).data;
+  const cls8Sections = (await expect('list Class 8 sections', admin, 'GET', `/sections?classId=${cls.id}`)).data;
+  check('a new class gets Section A automatically', cls8Sections?.length === 1 && cls8Sections[0].name === 'A', cls8Sections);
+  const secA = cls8Sections?.[0];
+  await expect('Section A cannot be created twice', admin, 'POST', '/sections', { academicYearId: year.id, classId: cls.id, name: 'A' }, 409);
   const secB = (await expect('create section B', admin, 'POST', '/sections', { academicYearId: year.id, classId: cls.id, name: 'B' })).data;
-  await expect('create section 9A', admin, 'POST', '/sections', { academicYearId: year.id, classId: cls9.id, name: 'A' });
+  check('Class 9 also has Section A', (await call(admin, 'GET', `/sections?classId=${cls9.id}`)).data?.some((section) => section.name === 'A'));
   const maths = (await expect('create subject', admin, 'POST', '/subjects', { academicYearId: year.id, name: 'Mathematics', code: 'math' })).data;
   check('subject code normalised', maths?.code === 'MATH', maths);
   const science = (await expect('create second subject', admin, 'POST', '/subjects', { academicYearId: year.id, name: 'Science', code: 'sci' })).data;
@@ -696,11 +699,99 @@ async function main() {
   await expect('teacher cannot read audit log', teacher, 'GET', '/audit-logs', undefined, 403);
   await expect('built-in role cannot be renamed', admin, 'GET', '/roles');
 
+  heading('Class, section and subject management');
+  const manager = creds.superAdmin ? await login(creds.superAdmin.email, creds.superAdmin.password) : admin;
+  const managerName = creds.superAdmin ? 'Super Admin' : 'School Admin';
+  const defaults = (await expect('read default subjects', manager, 'GET', '/academics/default-subjects')).data;
+  check('default subjects include optional Sanskrit', defaults?.length === 8 && defaults.some((d) => d.name === 'Sanskrit' && d.isOptional), defaults);
+  const class1 = (await expect(`${managerName} creates Class 1`, manager, 'POST', '/classes', { academicYearId: year.id, name: 'Class 1', sortOrder: 1 })).data;
+  let detail = (await expect('open Class 1 details', manager, 'GET', `/academics/classes/${class1?.id}`)).data;
+  const oneA = detail?.sections?.[0];
+  check('Class 1 has Section A with the default subjects', detail?.sections?.length === 1 && oneA?.name === 'A' && oneA.subjects.length === 8, detail);
+  check('Sanskrit starts switched off; the others are on', oneA?.subjects.filter((x) => x.isEnabled).length === 7 && oneA.subjects.find((x) => x.name === 'Sanskrit')?.isEnabled === false, oneA?.subjects);
+  const oneB = (await expect('add Section B', manager, 'POST', '/sections', { academicYearId: year.id, classId: class1?.id, name: 'B' })).data;
+  const oneC = (await expect('add Section C', manager, 'POST', '/sections', { academicYearId: year.id, classId: class1?.id, name: 'C' })).data;
+  await expect('rename Section C to D', manager, 'PATCH', `/sections/${oneC?.id}`, { name: 'D' });
+  const bSubjects = (await expect('Section B has its own subjects', manager, 'GET', `/academics/sections/${oneB?.id}/subjects`)).data;
+  check('Section B subjects are separate copies', bSubjects?.length === 8 && bSubjects.every((x) => !oneA.subjects.some((a) => a.id === x.id)), bSubjects?.length);
+  const bHindi = bSubjects?.find((x) => x.name === 'Hindi');
+  const bSanskrit = bSubjects?.find((x) => x.name === 'Sanskrit');
+  const bMaths = bSubjects?.find((x) => x.name === 'Mathematics');
+  await expect('rename Hindi in Section B only', manager, 'PATCH', `/academics/subjects/${bHindi?.id}`, { name: 'Hindi (Second language)' });
+  await expect('switch on Sanskrit in Section B', manager, 'PATCH', `/academics/subjects/${bSanskrit?.id}`, { isEnabled: true });
+  const computer = (await expect('add Computer Science to Section B', manager, 'POST', `/academics/sections/${oneB?.id}/subjects`, { name: 'Computer Science' })).data;
+  check('new subject gets a code from its name', computer?.code === 'COMPUTER', computer);
+  await expect('the same subject code twice in a section conflicts', manager, 'POST', `/academics/sections/${oneB?.id}/subjects`, { name: 'Maths again', code: 'MATH' }, 409);
+  await expect('a required subject cannot be switched off', manager, 'PATCH', `/academics/subjects/${bMaths?.id}`, { isEnabled: false }, 400);
+  detail = (await call(manager, 'GET', `/academics/classes/${class1?.id}`)).data;
+  const oneAAfter = detail?.sections?.find((x) => x.name === 'A');
+  check('Section A is unchanged by Section B edits', oneAAfter?.subjects.some((x) => x.name === 'Hindi') && oneAAfter.subjects.find((x) => x.name === 'Sanskrit')?.isEnabled === false && oneAAfter.subjects.length === 8, oneAAfter?.subjects?.map((x) => x.name));
+  check('sections are now A, B and D', detail?.sections?.map((x) => x.name).join(',') === 'A,B,D', detail?.sections?.map((x) => x.name));
+
+  const aMaths = oneAAfter?.subjects.find((x) => x.name === 'Mathematics');
+  await expect('teacher cannot assign teachers', teacher, 'PUT', `/academics/subjects/${aMaths?.id}/teacher`, { staffId: teacherStaff.id }, 403);
+  await expect('teacher cannot add subjects', teacher, 'POST', `/academics/sections/${oneB?.id}/subjects`, { name: 'Art' }, 403);
+  await expect('teacher cannot delete sections', teacher, 'DELETE', `/academics/sections/${oneB?.id}`, undefined, 403);
+  await expect('assign the teacher to Class 1-A Mathematics', manager, 'PUT', `/academics/subjects/${aMaths?.id}/teacher`, { staffId: teacherStaff.id });
+  await expect('a Section A subject cannot be assigned in Section B', manager, 'POST', '/staff-assignments', {
+    staffId: teacherStaff.id, academicYearId: year.id, classId: class1?.id, sectionId: oneB?.id, subjectId: aMaths?.id,
+  }, 400);
+  let mine = (await expect('teacher reads own teaching', teacher, 'GET', '/academics/my-teaching')).data;
+  check('teacher sees Class 1-A Mathematics', mine?.subjects?.some((x) => x.class.id === class1?.id && x.section?.name === 'A' && x.subject.name === 'Mathematics'), mine?.subjects);
+  check('teacher is class teacher of 8-A only', mine?.classTeacherOf?.length === 1 && mine.classTeacherOf[0].section.id === secA.id, mine?.classTeacherOf);
+  const marking = (await expect('teacher lists sections to mark', teacher, 'GET', `/attendance/my-sections?attendanceDate=${day(0)}`)).data;
+  check('teacher can mark only class-teacher sections', marking?.length === 1 && marking[0].id === secA.id, marking?.map((x) => x.id));
+
+  await expect('make the teacher class teacher of 1-B', manager, 'PUT', `/academics/sections/${oneB?.id}/class-teacher`, { staffId: teacherStaff.id });
+  mine = (await call(teacher, 'GET', '/academics/my-teaching')).data;
+  check('teacher now also sees 1-B as class teacher', mine?.classTeacherOf?.some((x) => x.section.id === oneB?.id), mine?.classTeacherOf);
+  const principalStaff = (await call(admin, 'GET', '/staff')).data?.find((x) => x.user.email === creds.principal.email);
+  await expect('change the class teacher of 1-B', manager, 'PUT', `/academics/sections/${oneB?.id}/class-teacher`, { staffId: principalStaff?.id });
+  mine = (await call(teacher, 'GET', '/academics/my-teaching')).data;
+  check('replacing the class teacher removes the old one', !mine?.classTeacherOf?.some((x) => x.section.id === oneB?.id), mine?.classTeacherOf);
+  await expect('remove the class teacher of 1-B', manager, 'PUT', `/academics/sections/${oneB?.id}/class-teacher`, {});
+  await expect('remove the teacher from 1-A Mathematics', manager, 'PUT', `/academics/subjects/${aMaths?.id}/teacher`, {});
+  mine = (await call(teacher, 'GET', '/academics/my-teaching')).data;
+  check('removing an assignment revokes it at once', !mine?.subjects?.some((x) => x.class.id === class1?.id), mine?.subjects);
+
+  await expect('assign a teacher to Sanskrit in 1-B', manager, 'PUT', `/academics/subjects/${bSanskrit?.id}/teacher`, { staffId: teacherStaff.id });
+  await expect('switch Sanskrit off in 1-B', manager, 'PATCH', `/academics/subjects/${bSanskrit?.id}`, { isEnabled: false });
+  const assignmentsView = (await expect('read the teacher assignments table', manager, 'GET', `/academics/assignments?academicYearId=${year.id}`)).data;
+  const bRow = assignmentsView?.find((x) => x.sectionId === oneB?.id);
+  check('switching a subject off removes its teacher', bRow && !bRow.subjects.some((x) => x.subjectId === bSanskrit?.id), bRow?.subjects?.map((x) => x.name));
+
+  await expect('Section D can be deleted while empty', manager, 'DELETE', `/academics/sections/${oneC?.id}`);
+  const unitTest = (await expect('create an exam for Class 1', manager, 'POST', '/examinations', { academicYearId: year.id, type: 'OTHER', name: `Unit test ${RUN}` })).data;
+  const added = (await expect('add every Class 1 subject to the exam', manager, 'POST', `/examinations/${unitTest?.id}/assessments/class`, { classId: class1?.id, maxMarks: 25 })).data;
+  check('one exam subject per section subject (7 in A + 8 in B)', added?.added === 15, added);
+  const again = (await call(manager, 'POST', `/examinations/${unitTest?.id}/assessments/class`, { classId: class1?.id, maxMarks: 25 })).data;
+  check('adding the class again skips existing subjects', again?.added === 0 && again.skipped === 15, again);
+
+  await expect('Section B with exam subjects cannot be deleted', manager, 'DELETE', `/academics/sections/${oneB?.id}`, undefined, 409);
+  const class2 = (await expect('create Class 2', manager, 'POST', '/classes', { academicYearId: year.id, name: 'Class 2', sortOrder: 2 })).data;
+  const class2A = (await call(manager, 'GET', `/academics/classes/${class2?.id}`)).data?.sections?.[0];
+  await expect('the last section of a class cannot be deleted', manager, 'DELETE', `/academics/sections/${class2A?.id}`, undefined, 409);
+  await expect('an empty class can be deleted', manager, 'DELETE', `/academics/classes/${class2?.id}`);
+  await expect('a class with students cannot be deleted', manager, 'DELETE', `/academics/classes/${cls.id}`, undefined, 409);
+  const classCards = (await expect('read the class cards', manager, 'GET', `/academics/classes?academicYearId=${year.id}`)).data;
+  const card1 = classCards?.find((x) => x.id === class1?.id);
+  check('class card counts sections and subjects', card1?.sections === 2 && card1.subjects === 15, card1);
+
   heading('Year end');
+  const yearClasses = (await call(admin, 'GET', `/classes?academicYearId=${year.id}`)).data ?? [];
+  const yearSections = ((await call(admin, 'GET', '/sections')).data ?? []).filter((section) => section.academicYearId === year.id && !section.isArchived);
+  const yearSubjects = (await call(admin, 'GET', `/subjects?academicYearId=${year.id}`)).data ?? [];
   const rollover = (await expect('roll the structure over to a new year', admin, 'POST', `/academic-years/${year.id}/rollover`, {
     name: `E2E next ${RUN}`, startsOn: '2027-07-01', endsOn: '2028-03-31', copyAssignments: true,
   })).data;
-  check('rollover copied classes, sections, subjects', rollover?.classesCopied === 2 && rollover.sectionsCopied === 3 && rollover.subjectsCopied === 2, rollover);
+  const copied = { classes: rollover?.classesCopied, sections: rollover?.sectionsCopied, subjects: rollover?.subjectsCopied };
+  const expected = { classes: yearClasses.length, sections: yearSections.length, subjects: yearSubjects.length };
+  check('rollover copied every class, section and section subject', JSON.stringify(copied) === JSON.stringify(expected), { copied, expected });
+  const nextClasses = (await call(admin, 'GET', `/classes?academicYearId=${rollover?.academicYear?.id}`)).data ?? [];
+  const nextClass1 = nextClasses.find((item) => item.name === 'Class 1');
+  const nextDetail = nextClass1 ? (await call(admin, 'GET', `/academics/classes/${nextClass1.id}`)).data : null;
+  const nextB = nextDetail?.sections?.find((section) => section.name === 'B');
+  check('section subjects follow their section into the new year', nextB?.subjects?.some((x) => x.name === 'Hindi (Second language)') && nextB.subjects.some((x) => x.name === 'Computer Science'), nextB?.subjects?.map((x) => x.name));
   await expect('close the rolled-over year', admin, 'POST', `/academic-years/${rollover.academicYear.id}/close`);
   await expect('closed year cannot be edited', admin, 'PATCH', `/academic-years/${rollover.academicYear.id}`, { name: 'x' }, 400);
 }
