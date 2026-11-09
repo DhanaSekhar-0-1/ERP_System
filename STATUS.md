@@ -1,7 +1,7 @@
 # School ERP Project Status
 
 Single source of truth for what is built, what is partial, and what is known
-to be missing. Last updated 2026-11-05.
+to be missing. Last updated 2026-11-06.
 
 Related documents:
 
@@ -17,7 +17,7 @@ Related documents:
 Web (apps/web, React + Vite) and Mobile (apps/mobile, React Native + Expo)
   -> NestJS 11 REST API (backend/src, prefix /api/v1, ~350 routes)
   -> Prisma 6 (DatabaseService extends PrismaClient)
-  -> Supabase PostgreSQL (10 migrations, ~70 tables)
+  -> Supabase PostgreSQL (11 migrations, ~70 tables)
   -> Supabase Auth (identity) + Supabase Storage (private files, bucket erp-files)
 ```
 
@@ -39,9 +39,9 @@ Shared services in `src/common`:
 
 | Area | Status |
 |---|---|
-| Prisma schema and migrations | Current (10 migrations) |
+| Prisma schema and migrations | Current (11 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 343/343 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 372/372 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
@@ -57,7 +57,7 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 | Module | Status | Notes |
 |---|---|---|
 | Authentication and sessions | Done | Login by email/student ID/staff ID, refresh, logout, forgot/reset/change password, OTP, session list and revoke, MFA endpoints, lockout after 5 failures in 15 min |
-| Organizations, schools, settings | Done | Super Admin limited to own organization; archived schools blocked |
+| Organizations, schools, settings | Done | Super Admin limited to own organization; archived schools blocked. In its own school, Super Admin can also register teachers, assign subjects and class teachers, create exams, and give both mark approvals |
 | Users, roles, permissions | Done | Permission overrides, email sync to Supabase, built-in roles cannot be renamed |
 | Academic years | Done | Activate, close, rollover (copy structure, optional promotion), summary |
 | Classes, sections, subjects | Done | Section archive |
@@ -68,7 +68,7 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 | Attendance | Done | ON_LEAVE status, bulk, 48-hour Tier 2 edits, Tier 3 corrections, summary, CSV export |
 | Homework | Done | Section-aware assignment check, grading, return, late flag, archive |
 | Announcements | Done | Audience targeting applied on read; publish notifies the audience |
-| Examinations and marks | Done | Draft -> Verified -> Locked -> Released, Tier 3/4 corrections, report cards |
+| Examinations and marks | Done | Exam types FA1-FA4 (minor), Q1 Quarterly, Q2 Half-yearly, Q3 Annual (major), Pre-public (Class 10 only), slip tests, and Other. Teachers submit marks, the School Admin approves, and the Principal's final approval releases results. Teachers create slip tests for their own sections, and the School Admin's approval releases them. Tier 3/4 corrections, report cards |
 | Fees and payments | Done | Structure approval, discounts and refunds (Tier 3), receipts, gateway orders, signed idempotent webhooks |
 | Leave | Done | Student leave marks ON_LEAVE; staff leave checks balance and opens substitute requests |
 | Timetable and substitutes | Done | Rule-based conflict engine, draft generator, available-teacher ranking |

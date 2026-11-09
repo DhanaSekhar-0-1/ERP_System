@@ -2,7 +2,7 @@
 
 | Folder | What it is | Who uses it |
 |---|---|---|
-| `apps/web` | React + Vite + Tailwind | Principal, School Admin |
+| `apps/web` | React + Vite + Tailwind | Principal, School Admin, Super Admin |
 | `apps/mobile` | React Native + Expo | Teacher, Student, Parent |
 | `packages/shared` | API client, types, colours | Both apps |
 
@@ -40,6 +40,15 @@ npm run web
 ```
 
 Open `http://localhost:3001` and sign in as the principal or the admin.
+
+| Page | What it does |
+|---|---|
+| Overview | Attendance today, weekly trend, and students at risk |
+| Attendance | Classes marked today, and a CSV export |
+| Students | Search students; School Admin assigns NFC cards |
+| Teachers | School Admin and Super Admin register teachers, assign subjects and classes, and set class teachers |
+| Exams | Create FA1-FA4, Q1-Q3, Pre-public, and other exams; School Admin approves marks, then the Principal gives final approval and releases results |
+| Approvals | Tier 3 and Tier 4 change requests |
 
 ## 4. Run the mobile app on an Android phone
 

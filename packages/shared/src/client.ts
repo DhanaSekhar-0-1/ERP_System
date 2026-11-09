@@ -1,4 +1,5 @@
 import type {
+  AcademicYear,
   Announcement,
   ApprovalRequest,
   AttendanceRecord,
@@ -9,14 +10,22 @@ import type {
   AuthTokens,
   BulkResult,
   Child,
+  ExamType,
+  ExamVerification,
+  Examination,
   LeaveStatus,
   MySection,
   NfcScanResult,
   Paged,
   PrincipalDashboard,
+  SchoolClass,
+  Section,
+  Staff,
+  StaffAssignment,
   SectionStudent,
   Student,
   StudentLeave,
+  Subject,
   UserContext,
 } from './types';
 
@@ -190,6 +199,41 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
       call<ApprovalRequest>('POST', `/approval-requests/${requestId}/${decision}`, {}),
 
     myChildren: () => call<Child[]>('GET', '/me/children'),
+
+    academicYears: () => call<AcademicYear[]>('GET', '/academic-years'),
+    classes: (academicYearId: string) => call<SchoolClass[]>('GET', `/classes${query({ academicYearId })}`),
+    sections: (classId: string) => call<Section[]>('GET', `/sections${query({ classId })}`),
+    subjects: (academicYearId: string) => call<Subject[]>('GET', `/subjects${query({ academicYearId })}`),
+
+    staff: () => call<Staff[]>('GET', '/staff'),
+    createTeacher: (input: {
+      displayName: string;
+      email: string;
+      password: string;
+      employeeNo: string;
+      nfcId: string;
+      designation?: string;
+      phone?: string;
+    }) => call<Staff>('POST', '/staff', input),
+    staffAssignments: (academicYearId: string) =>
+      call<StaffAssignment[]>('GET', `/staff-assignments${query({ academicYearId })}`),
+    assignTeacher: (
+      staffId: string,
+      input: { academicYearId: string; classId: string; sectionId?: string; subjectId: string; isClassTeacher: boolean },
+    ) => call<StaffAssignment>('POST', `/staff/${staffId}/assignments`, input),
+    removeAssignment: (assignmentId: string) =>
+      call<unknown>('DELETE', `/staff-assignments/${assignmentId}`),
+
+    examinations: (academicYearId: string) =>
+      call<Examination[]>('GET', `/examinations${query({ academicYearId })}`),
+    createExamination: (input: { academicYearId: string; type: ExamType; name?: string; startsOn?: string; endsOn?: string }) =>
+      call<Examination>('POST', '/examinations', input),
+    addAssessment: (examinationId: string, input: { classId: string; subjectId: string; maxMarks: number; passMarks?: number }) =>
+      call<unknown>('POST', `/examinations/${examinationId}/assessments`, input),
+    examVerification: (examinationId: string) =>
+      call<ExamVerification>('GET', `/examinations/${examinationId}/verification`),
+    examAction: (examinationId: string, action: 'verify' | 'reject' | 'release') =>
+      call<Examination>('POST', `/examinations/${examinationId}/${action}`, {}),
   };
 }
 

@@ -138,7 +138,8 @@ npm run prisma:bootstrap-admin -- `
 ```
 
 Create the test organization, school, and admin/teacher/student/principal accounts
-(add `--only=principal` to create just one account without resetting the others):
+(add `--only=principal` or `--only=superadmin` to create just one account without resetting the
+others):
 
 ```powershell
 npm run prisma:bootstrap-test-accounts -- `

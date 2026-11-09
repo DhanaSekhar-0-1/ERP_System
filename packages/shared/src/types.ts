@@ -152,6 +152,83 @@ export interface Child {
   enrollments: { class: { name: string }; section: { name: string } }[];
 }
 
+export interface AcademicYear {
+  id: string;
+  name: string;
+  startsOn: string;
+  endsOn: string;
+  isActive: boolean;
+  isClosed: boolean;
+}
+
+export interface SchoolClass {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
+
+export interface Section {
+  id: string;
+  name: string;
+  classId: string;
+}
+
+export interface Subject {
+  id: string;
+  name: string;
+  code: string | null;
+}
+
+export interface Staff {
+  id: string;
+  employeeNo: string;
+  designation: string | null;
+  nfcId: string | null;
+  user: { id: string; email: string; displayName: string; phone: string | null; status: string };
+}
+
+export interface StaffAssignment {
+  id: string;
+  staffId: string;
+  isClassTeacher: boolean;
+  class: { id: string; name: string };
+  section: { id: string; name: string } | null;
+  subject: { id: string; name: string; code: string | null };
+  academicYear: { id: string; name: string };
+}
+
+export type ExamType = 'FA1' | 'FA2' | 'FA3' | 'FA4' | 'Q1' | 'Q2' | 'Q3' | 'PRE_PUBLIC' | 'SLIP_TEST' | 'OTHER';
+export type ExamStatus = 'DRAFT' | 'VERIFIED' | 'LOCKED' | 'RELEASED';
+
+export interface Examination {
+  id: string;
+  name: string;
+  type: ExamType;
+  status: ExamStatus;
+  term: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  academicYearId: string;
+  _count?: { assessments: number };
+}
+
+export interface ExamVerification {
+  examinationId: string;
+  status: ExamStatus;
+  missing: number;
+  unsubmitted: number;
+  assessments: {
+    assessmentId: string;
+    class: { id: string; name: string };
+    section: { id: string; name: string } | null;
+    subject: { id: string; name: string };
+    enrolled: number;
+    entered: number;
+    submitted: number;
+    complete: boolean;
+  }[];
+}
+
 export interface Paged<T> {
   items: T[];
   total: number;

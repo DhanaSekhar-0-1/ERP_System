@@ -60,6 +60,20 @@ enum OverrideEffect {
   REVOKE
 }
 
+/// FA1-FA4 are minor exams, Q1-Q3 major exams, PRE_PUBLIC is for Class 10 only, SLIP_TEST is created by teachers.
+enum ExamType {
+  FA1
+  FA2
+  FA3
+  FA4
+  Q1
+  Q2
+  Q3
+  PRE_PUBLIC
+  SLIP_TEST
+  OTHER
+}
+
 enum ExamStatus {
   DRAFT
   VERIFIED
@@ -454,6 +468,7 @@ model Section {
   homework            Homework[]
   targetAnnouncements Announcement[]    @relation("AnnouncementTargetSection")
   assignments         StaffAssignment[]
+  assessments         Assessment[]
   timetables          Timetable[]
 
   @@unique([classId, name])
@@ -808,6 +823,7 @@ model Examination {
   schoolId       String       @map("school_id") @db.Uuid
   academicYearId String       @map("academic_year_id") @db.Uuid
   name           String
+  type           ExamType     @default(OTHER)
   term           String?
   startsOn       DateTime?    @map("starts_on") @db.Date
   endsOn         DateTime?    @map("ends_on") @db.Date
@@ -817,6 +833,7 @@ model Examination {
   lockedAt       DateTime?    @map("locked_at")
   releasedAt     DateTime?    @map("released_at")
   releasedById   String?      @map("released_by_id") @db.Uuid
+  createdById    String?      @map("created_by_id") @db.Uuid
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
   school         School       @relation(fields: [schoolId], references: [id])
@@ -833,6 +850,8 @@ model Assessment {
   examinationId String      @map("examination_id") @db.Uuid
   classId       String      @map("class_id") @db.Uuid
   subjectId     String      @map("subject_id") @db.Uuid
+  /// Set for slip tests, which cover one section instead of the whole class.
+  sectionId     String?     @map("section_id") @db.Uuid
   maxMarks      Decimal     @map("max_marks") @db.Decimal(6, 2)
   passMarks     Decimal?    @map("pass_marks") @db.Decimal(6, 2)
   examDate      DateTime?   @map("exam_date") @db.Date
@@ -841,6 +860,7 @@ model Assessment {
   examination   Examination @relation(fields: [examinationId], references: [id])
   class         SchoolClass @relation(fields: [classId], references: [id])
   subject       Subject     @relation(fields: [subjectId], references: [id])
+  section       Section?    @relation(fields: [sectionId], references: [id])
   marks         Mark[]
 
   @@unique([examinationId, classId, subjectId])

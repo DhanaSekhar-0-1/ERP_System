@@ -6,7 +6,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
-import { Assessment, ExamStatus, Examination, Prisma } from '@prisma/client';
+import { Assessment, ExamStatus, ExamType, Examination, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../common/database/database.service';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import { AccessService, SchoolContext } from '../../common/access/access.service';
@@ -18,6 +18,7 @@ import {
   CreateAssessmentDto,
   CreateExaminationDto,
   CreateMarkDto,
+  CreateSlipTestDto,
   MarkCorrectionDto,
   MarkEntryDto,
   MarksQueryDto,
@@ -41,12 +42,33 @@ const GRADE_BANDS: [number, string][] = [
   [0, 'E'],
 ];
 
-const NEXT_STATUS: Record<string, { from: ExamStatus; to: ExamStatus }> = {
-  verify: { from: 'DRAFT', to: 'VERIFIED' },
-  lock: { from: 'VERIFIED', to: 'LOCKED' },
-  release: { from: 'LOCKED', to: 'RELEASED' },
-  unlock: { from: 'LOCKED', to: 'DRAFT' },
-  reject: { from: 'VERIFIED', to: 'DRAFT' },
+/** Default names for the built-in exam types. */
+export const EXAM_TYPE_NAMES: Record<ExamType, string | null> = {
+  FA1: 'FA1',
+  FA2: 'FA2',
+  FA3: 'FA3',
+  FA4: 'FA4',
+  Q1: 'Q1 Quarterly',
+  Q2: 'Q2 Half-yearly',
+  Q3: 'Q3 Annual',
+  PRE_PUBLIC: 'Pre-public',
+  SLIP_TEST: null,
+  OTHER: null,
+};
+
+const NO_MATCH = '00000000-0000-0000-0000-000000000000';
+
+/**
+ * Marks move DRAFT -> VERIFIED -> RELEASED. The School Admin verifies (first approval) and the
+ * Principal releases (final approval). Locking in between is optional. A slip test needs only
+ * the School Admin, whose approval releases it straight away.
+ */
+const NEXT_STATUS: Record<string, { from: ExamStatus[]; to: ExamStatus }> = {
+  verify: { from: ['DRAFT'], to: 'VERIFIED' },
+  lock: { from: ['VERIFIED'], to: 'LOCKED' },
+  release: { from: ['VERIFIED', 'LOCKED'], to: 'RELEASED' },
+  unlock: { from: ['LOCKED'], to: 'DRAFT' },
+  reject: { from: ['VERIFIED'], to: 'DRAFT' },
 };
 
 @Injectable()
@@ -127,21 +149,112 @@ export class ExaminationsService implements OnModuleInit {
     });
     if (!year) throw new NotFoundException('Academic year not found');
     if (year.isClosed) throw new BadRequestException('This academic year is closed');
-    const exam = await this.database.examination.create({
-      data: {
-        schoolId: context.schoolId,
-        academicYearId: input.academicYearId,
-        name: input.name.trim(),
-        term: input.term?.trim() || null,
-        startsOn: input.startsOn ? new Date(input.startsOn) : null,
-        endsOn: input.endsOn ? new Date(input.endsOn) : null,
-      },
-    });
+    const type = input.type ?? 'OTHER';
+    const name = input.name?.trim() || EXAM_TYPE_NAMES[type];
+    if (!name) throw new BadRequestException('Give the examination a name');
+    const exam = await this.uniqueExamName(() =>
+      this.database.examination.create({
+        data: {
+          schoolId: context.schoolId,
+          academicYearId: input.academicYearId,
+          type,
+          name,
+          term: input.term?.trim() || null,
+          startsOn: input.startsOn ? new Date(input.startsOn) : null,
+          endsOn: input.endsOn ? new Date(input.endsOn) : null,
+          createdById: context.userId,
+        },
+      }),
+    );
     await this.audit.record(context, {
       action: 'examination.created',
       entityType: 'examination',
       entityId: exam.id,
       newValue: input,
+    });
+    return exam;
+  }
+
+  /** A teacher's slip test for one of their own classes and subjects, with its single assessment. */
+  async createSlipTest(authUser: SupabaseUser, input: CreateSlipTestDto) {
+    const context = await this.access.schoolContext(authUser);
+    if (!context.isLeader && !context.isTeacher) {
+      throw new ForbiddenException('Only teachers and school leaders can create slip tests');
+    }
+    const year = await this.database.academicYear.findFirst({
+      where: input.academicYearId
+        ? { id: input.academicYearId, schoolId: context.schoolId }
+        : { schoolId: context.schoolId, isActive: true },
+    });
+    if (!year) throw new NotFoundException('Academic year not found');
+    if (year.isClosed) throw new BadRequestException('This academic year is closed');
+    const [schoolClass, subject, section] = await Promise.all([
+      this.database.schoolClass.findFirst({
+        where: { id: input.classId, schoolId: context.schoolId, academicYearId: year.id },
+      }),
+      this.database.subject.findFirst({
+        where: { id: input.subjectId, schoolId: context.schoolId, academicYearId: year.id },
+      }),
+      input.sectionId
+        ? this.database.section.findFirst({ where: { id: input.sectionId, classId: input.classId } })
+        : Promise.resolve(null),
+    ]);
+    if (!schoolClass || !subject) throw new NotFoundException('Class or subject not found in this year');
+    if (input.sectionId && !section) throw new NotFoundException('Section not found in this class');
+    if (input.passMarks !== undefined && input.passMarks > input.maxMarks) {
+      throw new BadRequestException('Pass marks cannot exceed maximum marks');
+    }
+    if (!context.isLeader) {
+      const assignments = await this.database.staffAssignment.findMany({
+        where: {
+          staffId: context.staffId ?? NO_MATCH,
+          academicYearId: year.id,
+          classId: input.classId,
+          subjectId: input.subjectId,
+        },
+      });
+      const wholeClass = assignments.some((assignment) => !assignment.sectionId);
+      const covered =
+        wholeClass ||
+        (Boolean(input.sectionId) &&
+          assignments.some((assignment) => assignment.sectionId === input.sectionId));
+      if (!covered) {
+        throw new ForbiddenException(
+          assignments.length
+            ? 'Choose one of your sections for this slip test'
+            : 'You are not assigned to this class and subject',
+        );
+      }
+    }
+    const exam = await this.uniqueExamName(() =>
+      this.database.examination.create({
+        data: {
+          schoolId: context.schoolId,
+          academicYearId: year.id,
+          type: 'SLIP_TEST',
+          name: input.name.trim(),
+          startsOn: input.examDate ? new Date(input.examDate) : null,
+          createdById: context.userId,
+          assessments: {
+            create: {
+              schoolId: context.schoolId,
+              classId: input.classId,
+              sectionId: input.sectionId ?? null,
+              subjectId: input.subjectId,
+              maxMarks: input.maxMarks,
+              passMarks: input.passMarks ?? null,
+              examDate: input.examDate ? new Date(input.examDate) : null,
+            },
+          },
+        },
+        include: { assessments: { include: { class: true, section: true, subject: true } } },
+      }),
+    );
+    await this.audit.record(context, {
+      action: 'examination.created',
+      entityType: 'examination',
+      entityId: exam.id,
+      newValue: { ...input, type: 'SLIP_TEST' },
     });
     return exam;
   }
@@ -222,6 +335,9 @@ export class ExaminationsService implements OnModuleInit {
     if (!schoolClass || !subject) {
       throw new NotFoundException('Class or subject not found in the examination year');
     }
+    if (exam.type === 'PRE_PUBLIC' && !this.isClassTen(schoolClass)) {
+      throw new BadRequestException('Pre-public exams are only for Class 10');
+    }
     if (input.passMarks !== undefined && input.passMarks > input.maxMarks) {
       throw new BadRequestException('Pass marks cannot exceed maximum marks');
     }
@@ -243,27 +359,43 @@ export class ExaminationsService implements OnModuleInit {
     const context = await this.leader(authUser);
     const exam = await this.scopedExam(context, examinationId);
     const step = NEXT_STATUS[action];
-    if (exam.status !== step.from) {
+    const isAdmin = context.isSchoolAdmin || context.isSuperAdmin;
+    const slipTest = exam.type === 'SLIP_TEST';
+    if (action === 'verify' && !isAdmin) {
+      throw new ForbiddenException('The School Admin approves marks first');
+    }
+    if (action === 'release') {
+      if (slipTest && !isAdmin) {
+        throw new ForbiddenException('The School Admin approves and releases slip tests');
+      }
+      if (!slipTest && !context.isPrincipal && !context.isSuperAdmin) {
+        throw new ForbiddenException('Only the Principal gives final approval and releases results');
+      }
+    }
+    if (!step.from.includes(exam.status)) {
       throw new ConflictException(
         `Cannot ${action} an examination that is ${exam.status.toLowerCase()}`,
       );
     }
     if (action === 'verify') {
       const verification = await this.verificationData(context, exam);
+      if (!verification.assessments.length) {
+        throw new ConflictException('Add at least one subject before approving marks');
+      }
       if (verification.missing > 0 || verification.unsubmitted > 0) {
         throw new ConflictException(
-          `Cannot verify: ${verification.missing} marks missing and ${verification.unsubmitted} not submitted`,
+          `Cannot approve yet: ${verification.missing} marks missing and ${verification.unsubmitted} not submitted by teachers`,
         );
       }
     }
-    if (action === 'release' && !context.isPrincipal && !context.isSuperAdmin && !context.isSchoolAdmin) {
-      throw new ForbiddenException('Only the Principal or School Admin can release results');
-    }
+    // The School Admin's approval is the only one a slip test needs, so it also releases it.
+    const releases = action === 'release' || (action === 'verify' && slipTest);
+    const to: ExamStatus = releases ? 'RELEASED' : step.to;
     const now = new Date();
-    const data: Prisma.ExaminationUpdateInput = { status: step.to };
+    const data: Prisma.ExaminationUpdateInput = { status: to };
     if (action === 'verify') Object.assign(data, { verifiedAt: now, verifiedById: context.userId });
     if (action === 'lock') Object.assign(data, { lockedAt: now });
-    if (action === 'release') Object.assign(data, { releasedAt: now, releasedById: context.userId });
+    if (releases) Object.assign(data, { releasedAt: now, releasedById: context.userId });
     const updated = await this.database.$transaction(async (transaction) => {
       const result = await transaction.examination.update({ where: { id: exam.id }, data });
       if (action === 'reject' || action === 'unlock') {
@@ -279,14 +411,14 @@ export class ExaminationsService implements OnModuleInit {
           entityType: 'examination',
           entityId: exam.id,
           oldValue: { status: exam.status },
-          newValue: { status: step.to },
+          newValue: { status: to },
           reason: note,
         },
         transaction,
       );
       return result;
     });
-    if (action === 'release') {
+    if (releases) {
       await this.notifyRelease(context, exam);
     }
     return updated;
@@ -541,10 +673,15 @@ export class ExaminationsService implements OnModuleInit {
         studentId: entry.studentId,
         academicYearId: exam.academicYearId,
         classId: assessment.classId,
+        ...(assessment.sectionId ? { sectionId: assessment.sectionId } : {}),
         status: { in: ['ACTIVE', 'PROMOTED'] },
       },
     });
-    if (!enrollment) throw new BadRequestException('Student is not enrolled in this class');
+    if (!enrollment) {
+      throw new BadRequestException(
+        assessment.sectionId ? 'Student is not in this section' : 'Student is not enrolled in this class',
+      );
+    }
     const existing = await this.database.mark.findUnique({
       where: { assessmentId_studentId: { assessmentId: assessment.id, studentId: entry.studentId } },
     });
@@ -615,13 +752,18 @@ export class ExaminationsService implements OnModuleInit {
     });
     if (!assignments.length) return [];
     const wholeClass = assignments.some((assignment) => !assignment.sectionId);
+    const sections = assignments.map((assignment) => assignment.sectionId as string);
+    if (assessment.sectionId && !wholeClass && !sections.includes(assessment.sectionId)) return [];
+    const sectionFilter = assessment.sectionId
+      ? { sectionId: assessment.sectionId }
+      : wholeClass
+        ? {}
+        : { sectionId: { in: sections } };
     const enrollments = await this.database.enrollment.findMany({
       where: {
         classId: assessment.classId,
         academicYearId: exam.academicYearId,
-        ...(wholeClass
-          ? {}
-          : { sectionId: { in: assignments.map((assignment) => assignment.sectionId as string) } }),
+        ...sectionFilter,
       },
       select: { studentId: true },
     });
@@ -652,6 +794,7 @@ export class ExaminationsService implements OnModuleInit {
       where: { examinationId: exam.id },
       include: {
         class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
         subject: { select: { id: true, name: true } },
         marks: { select: { status: true } },
       },
@@ -665,6 +808,7 @@ export class ExaminationsService implements OnModuleInit {
           schoolId: context.schoolId,
           academicYearId: exam.academicYearId,
           classId: assessment.classId,
+          ...(assessment.sectionId ? { sectionId: assessment.sectionId } : {}),
           status: { in: ['ACTIVE', 'PROMOTED'] },
         },
       });
@@ -675,6 +819,7 @@ export class ExaminationsService implements OnModuleInit {
       rows.push({
         assessmentId: assessment.id,
         class: assessment.class,
+        section: assessment.section,
         subject: assessment.subject,
         enrolled,
         entered,
@@ -698,6 +843,23 @@ export class ExaminationsService implements OnModuleInit {
         body: `${exam.name} results are now available.`,
         data: { examinationId: exam.id, studentId },
       });
+    }
+  }
+
+  /** Class 10 is recognised by its order or its name, such as "Class 10" or "X". */
+  private isClassTen(schoolClass: { name: string; sortOrder: number | null }) {
+    return schoolClass.sortOrder === 10 || /\b(10|x)\b/i.test(schoolClass.name);
+  }
+
+  /** Runs a create and turns a duplicate exam name into a clear 409. */
+  private async uniqueExamName<T>(create: () => Promise<T>): Promise<T> {
+    try {
+      return await create();
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('An examination with this name already exists in this academic year');
+      }
+      throw error;
     }
   }
 

@@ -13,11 +13,13 @@ interface AccountOptions {
   teacherEmail: string;
   studentEmail: string;
   principalEmail: string;
+  superAdminEmail: string;
   only?: string[];
   adminPassword?: string;
   teacherPassword?: string;
   studentPassword?: string;
   principalPassword?: string;
+  superAdminPassword?: string;
 }
 
 const prisma = new PrismaClient();
@@ -43,11 +45,13 @@ function getOptions(): AccountOptions {
     teacherEmail: requiredOption('teacher-email', 'test.teacher@erp.local'),
     studentEmail: requiredOption('student-email', 'test.student@erp.local'),
     principalEmail: requiredOption('principal-email', 'test.principal@erp.local'),
+    superAdminEmail: requiredOption('super-admin-email', 'test.superadmin@erp.local'),
     only: option('only')?.split(',').map((role) => role.trim().toLowerCase()),
     adminPassword: option('admin-password'),
     teacherPassword: option('teacher-password'),
     studentPassword: option('student-password'),
     principalPassword: option('principal-password'),
+    superAdminPassword: option('super-admin-password'),
   };
 }
 
@@ -142,30 +146,46 @@ async function main(): Promise<void> {
 
   const accounts = [
     {
+      key: 'admin',
       email: options.adminEmail,
       displayName: 'Test School Admin',
       role: 'School Admin',
       accountPassword: password(options.adminPassword),
     },
     {
+      key: 'teacher',
       email: options.teacherEmail,
       displayName: 'Test Teacher',
       role: 'Teacher',
       accountPassword: password(options.teacherPassword),
     },
     {
+      key: 'student',
       email: options.studentEmail,
       displayName: 'Test Student',
       role: 'Student',
       accountPassword: password(options.studentPassword),
     },
     {
+      key: 'principal',
       email: options.principalEmail,
       displayName: 'Test Principal',
       role: 'Principal',
       accountPassword: password(options.principalPassword),
     },
-  ].filter((account) => !options.only || options.only.includes(account.role.toLowerCase()));
+    {
+      key: 'superadmin',
+      email: options.superAdminEmail,
+      displayName: 'Test Super Admin',
+      role: 'Super Admin',
+      accountPassword: password(options.superAdminPassword),
+    },
+  ].filter(
+    (account) =>
+      !options.only ||
+      options.only.includes(account.key) ||
+      options.only.includes(account.role.toLowerCase()),
+  );
 
   const created = [];
   for (const account of accounts) {

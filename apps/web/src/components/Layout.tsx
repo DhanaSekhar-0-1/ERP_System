@@ -1,6 +1,6 @@
 import { initials } from '@erp/shared';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarCheck, GraduationCap, LayoutDashboard, LogOut, ShieldCheck, Users } from 'lucide-react';
+import { CalendarCheck, ClipboardList, GraduationCap, LayoutDashboard, LogOut, ShieldCheck, UserCog, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -9,6 +9,8 @@ const LINKS = [
   { to: '/', label: 'Overview', icon: LayoutDashboard },
   { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
   { to: '/students', label: 'Students', icon: Users },
+  { to: '/teachers', label: 'Teachers', icon: UserCog },
+  { to: '/exams', label: 'Exams', icon: ClipboardList },
   { to: '/approvals', label: 'Approvals', icon: ShieldCheck },
 ];
 

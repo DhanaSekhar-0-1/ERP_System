@@ -34,7 +34,14 @@ function credentials() {
       password: chunk.match(/Password:\s*(\S+)/)[1],
     };
   };
-  return { admin: block('Admin'), teacher: block('Teacher'), student: block('Student'), principal: block('Principal') };
+  const optional = (label) => (text.includes(`${label}:`) ? block(label) : null);
+  return {
+    admin: block('Admin'),
+    teacher: block('Teacher'),
+    student: block('Student'),
+    principal: block('Principal'),
+    superAdmin: optional('Super Admin'),
+  };
 }
 
 function day(offset = 0) {
@@ -333,9 +340,11 @@ async function main() {
   await expect('teacher submits marks', teacher, 'POST', '/marks/submit', { assessmentId: assessment.id });
   const verification = (await expect('verification view', admin, 'GET', `/examinations/${exam.id}/verification`)).data;
   check('verification complete', verification?.missing === 0 && verification?.unsubmitted === 0, verification);
-  await expect('verify', admin, 'POST', `/examinations/${exam.id}/verify`, {});
+  await expect('principal cannot give the first approval', principal, 'POST', `/examinations/${exam.id}/verify`, {}, 403);
+  await expect('School Admin approves the marks (verify)', admin, 'POST', `/examinations/${exam.id}/verify`, {});
   await expect('lock', admin, 'POST', `/examinations/${exam.id}/lock`, {});
-  await expect('release', admin, 'POST', `/examinations/${exam.id}/release`, {});
+  await expect('School Admin cannot give the final approval', admin, 'POST', `/examinations/${exam.id}/release`, {}, 403);
+  await expect('Principal gives final approval (release)', principal, 'POST', `/examinations/${exam.id}/release`, {});
   const cards = (await expect('student report card', student, 'GET', `/students/${studentId}/report-cards`)).data;
   const card = cards?.find((c) => c.examination.id === exam.id);
   check('report card shows 42/50 with grade A2', card?.subjects?.[0]?.marksObtained === 42 && card?.grade === 'A2', card);
@@ -343,6 +352,53 @@ async function main() {
   check('student now sees only own released marks', markList?.length >= 1 && markList.every((m) => m.studentId === studentId), markList?.length);
   const ownMark = markList.find((m) => m.assessmentId === assessment.id);
   await expect('post-release correction needs a document (Tier 4)', teacher, 'POST', `/marks/${ownMark.id}/correction-request`, { marksObtained: 44, reason: 'Totalling error' }, 400);
+
+  heading('Exam types and slip tests');
+  const fa1 = (await expect('create FA1 by type', admin, 'POST', '/examinations', { academicYearId: year.id, type: 'FA1' })).data;
+  check('FA1 gets its default name', fa1?.name === 'FA1' && fa1?.type === 'FA1', fa1);
+  await expect('second FA1 in the same year conflicts', admin, 'POST', '/examinations', { academicYearId: year.id, type: 'FA1' }, 409);
+  const q1 = (await expect('create Q1', admin, 'POST', '/examinations', { academicYearId: year.id, type: 'Q1' })).data;
+  check('Q1 is named Q1 Quarterly', q1?.name === 'Q1 Quarterly', q1);
+  const prePublic = (await expect('create a pre-public exam', admin, 'POST', '/examinations', { academicYearId: year.id, type: 'PRE_PUBLIC' })).data;
+  await expect('an exam without subjects cannot be approved', admin, 'POST', `/examinations/${q1.id}/verify`, {}, 409);
+  await expect('pre-public exam refuses Class 8', admin, 'POST', `/examinations/${prePublic.id}/assessments`, { classId: cls.id, subjectId: maths.id, maxMarks: 80 }, 400);
+  await expect('slip tests cannot be made through the exam route', admin, 'POST', '/examinations', { academicYearId: year.id, type: 'SLIP_TEST', name: `x ${RUN}` }, 400);
+  await expect('other exams need a name', admin, 'POST', '/examinations', { academicYearId: year.id, type: 'OTHER' }, 400);
+  await expect('teacher cannot create a main exam', teacher, 'POST', '/examinations', { academicYearId: year.id, type: 'FA2' }, 403);
+  const slip = (await expect('teacher creates a slip test for 8-A maths', teacher, 'POST', '/examinations/slip-tests', {
+    academicYearId: year.id, name: `Slip test ${RUN}`, classId: cls.id, sectionId: secA.id, subjectId: maths.id, maxMarks: 20,
+  })).data;
+  check('slip test has one 8-A assessment', slip?.type === 'SLIP_TEST' && slip.assessments?.length === 1 && slip.assessments[0].sectionId === secA.id, slip);
+  await expect('teacher cannot set a slip test for 8-B maths', teacher, 'POST', '/examinations/slip-tests', {
+    academicYearId: year.id, name: `Slip test B ${RUN}`, classId: cls.id, sectionId: secB.id, subjectId: maths.id, maxMarks: 20,
+  }, 403);
+  const slipAssessment = slip?.assessments?.[0];
+  await expect('teacher enters slip test marks', teacher, 'POST', '/marks/bulk', {
+    assessmentId: slipAssessment?.id, marks: [{ studentId, marksObtained: 18 }, { studentId: newStudent.id, isAbsent: true }],
+  });
+  check('student cannot see slip test marks before approval', !(await call(student, 'GET', '/marks')).data?.some((m) => m.assessmentId === slipAssessment?.id));
+  await expect('teacher submits slip test marks', teacher, 'POST', '/marks/submit', { assessmentId: slipAssessment?.id });
+  await expect('principal does not approve slip tests', principal, 'POST', `/examinations/${slip?.id}/verify`, {}, 403);
+  const approvedSlip = (await expect('School Admin approves the slip test', admin, 'POST', `/examinations/${slip?.id}/verify`, {})).data;
+  check('School Admin approval releases the slip test', approvedSlip?.status === 'RELEASED', approvedSlip?.status);
+  check('student sees the slip test mark', (await call(student, 'GET', '/marks')).data?.some((m) => m.assessmentId === slipAssessment?.id && Number(m.marksObtained) === 18));
+
+  if (creds.superAdmin) {
+    heading('Super Admin school setup');
+    const superAdmin = await login(creds.superAdmin.email, creds.superAdmin.password);
+    const newTeacher = (await expect('Super Admin registers a teacher', superAdmin, 'POST', '/staff', {
+      email: `teacher.${RUN}@erp.local`, password: `Teach#${RUN}`, displayName: `Teacher ${RUN}`, employeeNo: `T-${RUN}`, nfcId: `NFC-T-${RUN}`, designation: 'Teacher',
+    })).data;
+    const superAssignment = (await expect('Super Admin assigns maths and class teacher of 8-B', superAdmin, 'POST', `/staff/${newTeacher?.id}/assignments`, {
+      academicYearId: year.id, classId: cls.id, sectionId: secB.id, subjectId: maths.id, isClassTeacher: true,
+    })).data;
+    check('new teacher is class teacher of 8-B', superAssignment?.isClassTeacher === true && superAssignment.sectionId === secB.id, superAssignment);
+    const superExam = (await expect('Super Admin creates FA2', superAdmin, 'POST', '/examinations', { academicYearId: year.id, type: 'FA2' })).data;
+    check('FA2 created', superExam?.name === 'FA2', superExam);
+    await expect('Super Admin lists staff', superAdmin, 'GET', '/staff');
+  } else {
+    console.log('  SKIP  Super Admin checks: no "Super Admin:" block in the credentials file');
+  }
 
   heading('Files and Tier 4 approvals');
   const form = new FormData();

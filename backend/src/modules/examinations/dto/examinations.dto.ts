@@ -5,6 +5,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -13,14 +14,24 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { ExamType } from '@prisma/client';
+
+/** Exam types a School Admin, Principal or Super Admin can create. Slip tests have their own route. */
+export const SCHOOL_EXAM_TYPES = Object.values(ExamType).filter((type) => type !== ExamType.SLIP_TEST);
 
 export class CreateExaminationDto {
   @IsUUID()
   academicYearId!: string;
 
+  @IsOptional()
+  @IsIn(SCHOOL_EXAM_TYPES)
+  type?: ExamType;
+
+  /** Defaults to the type's name, such as "FA1" or "Q1 Quarterly". Required for OTHER. */
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  name!: string;
+  name?: string;
 
   @IsOptional()
   @IsString()
@@ -57,6 +68,43 @@ export class UpdateExaminationDto {
 export class CreateAssessmentDto {
   @IsUUID()
   classId!: string;
+
+  @IsUUID()
+  subjectId!: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  maxMarks!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  passMarks?: number;
+
+  @IsOptional()
+  @IsDateString()
+  examDate?: string;
+}
+
+/** A teacher's slip test: one exam with one assessment for a class, optionally one section. */
+export class CreateSlipTestDto {
+  /** Defaults to the active academic year. */
+  @IsOptional()
+  @IsUUID()
+  academicYearId?: string;
+
+  @IsString()
+  @MinLength(1)
+  name!: string;
+
+  @IsUUID()
+  classId!: string;
+
+  @IsOptional()
+  @IsUUID()
+  sectionId?: string;
 
   @IsUUID()
   subjectId!: string;

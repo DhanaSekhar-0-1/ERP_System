@@ -16,6 +16,7 @@ import {
   CreateAssessmentDto,
   CreateExaminationDto,
   CreateMarkDto,
+  CreateSlipTestDto,
   ExamNoteDto,
   MarkCorrectionDto,
   MarksQueryDto,
@@ -43,6 +44,13 @@ export class ExaminationsController {
   @RequirePermissions('examinations:manage')
   create(@CurrentUser() user: SupabaseUser, @Body() input: CreateExaminationDto) {
     return this.exams.create(user, input);
+  }
+
+  /** Teachers create slip tests for their own classes and subjects. */
+  @Post('slip-tests')
+  @RequirePermissions('marks:manage')
+  createSlipTest(@CurrentUser() user: SupabaseUser, @Body() input: CreateSlipTestDto) {
+    return this.exams.createSlipTest(user, input);
   }
 
   @Get(':examinationId')

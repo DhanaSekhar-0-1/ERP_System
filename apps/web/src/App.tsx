@@ -7,6 +7,8 @@ import { LoginPage } from './pages/LoginPage';
 import { MobileOnlyPage } from './pages/MobileOnlyPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { StudentsPage } from './pages/StudentsPage';
+import { TeachersPage } from './pages/TeachersPage';
+import { ExamsPage } from './pages/ExamsPage';
 
 const LEADER_ROLES = ['Principal', 'School Admin', 'Super Admin'];
 
@@ -29,6 +31,8 @@ export function App() {
         <Route index element={<OverviewPage />} />
         <Route path="attendance" element={<AttendancePage />} />
         <Route path="students" element={<StudentsPage />} />
+        <Route path="teachers" element={<TeachersPage />} />
+        <Route path="exams" element={<ExamsPage />} />
         <Route path="approvals" element={<ApprovalsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
