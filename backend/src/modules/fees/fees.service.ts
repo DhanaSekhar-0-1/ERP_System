@@ -15,6 +15,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { ApprovalEngine } from '../../common/approvals/approval-engine.service';
 import { NotifyService } from '../../common/notify/notify.service';
 import { pageArgs, paged } from '../../common/http/pagination';
+import { ROLE } from '../../common/access/roles';
 import {
   ApplyDiscountDto,
   AssignStudentFeesDto,
@@ -60,7 +61,10 @@ export class FeesService implements OnModuleInit {
         });
       },
     });
+    // Discounts are always a request, and only the Principal may approve one, never their own.
     this.approvals.register(DISCOUNT, {
+      approverRoles: [ROLE.PRINCIPAL],
+      allowSelfApproval: false,
       onApproved: async (transaction, request, approver) => {
         const { amount } = request.payload as { amount: number };
         const fee = await transaction.studentFee.findUniqueOrThrow({ where: { id: request.entityId } });
@@ -362,7 +366,7 @@ export class FeesService implements OnModuleInit {
     return updated;
   }
 
-  /** Accountants request discounts; a School Admin or Principal applies them (Tier 3). */
+  /** Raises a discount request. Nothing changes until the Principal approves it. */
   async applyDiscount(authUser: SupabaseUser, studentFeeId: string, input: ApplyDiscountDto) {
     const context = await this.finance(authUser);
     const fee = await this.scopedFee(context, studentFeeId);
@@ -378,10 +382,6 @@ export class FeesService implements OnModuleInit {
       payload: { amount: input.amount },
       tier: 3,
     });
-    if (context.isLeader) {
-      await this.approvals.approve(context, request.id, 'Applied by approver');
-      return { applied: true, studentFee: await this.findStudentFee(authUser, fee.id) };
-    }
     return { applied: false, approvalRequest: request };
   }
 

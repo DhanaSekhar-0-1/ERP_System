@@ -14,6 +14,10 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { CreatePermissionOverrideDto } from './dto/permission-override.dto';
 import { AccessService } from '../../common/access/access.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { ROLE } from '../../common/access/roles';
+
+/** Senior accounts: only a Super Admin may create them, give these roles, or change their holders. */
+const SENIOR_ROLES: string[] = [ROLE.SUPER_ADMIN, ROLE.SCHOOL_ADMIN, ROLE.PRINCIPAL, ROLE.ACCOUNTANT];
 
 @Injectable()
 export class UsersService {
@@ -110,7 +114,7 @@ export class UsersService {
     input: UpdateUserDto,
   ) {
     const actor = await this.getActor(authUser);
-    const existing = await this.getScopedUser(actor, userId);
+    const existing = await this.getManageableUser(actor, userId);
     const scope = await this.resolveScope(
       actor,
       input.organizationId ?? existing.organizationId ?? undefined,
@@ -151,7 +155,7 @@ export class UsersService {
 
   async activate(authUser: SupabaseUser, userId: string) {
     const actor = await this.getActor(authUser);
-    const existing = await this.getScopedUser(actor, userId);
+    const existing = await this.getManageableUser(actor, userId);
     const user = await this.database.user.update({
       where: { id: existing.id },
       data: { status: 'ACTIVE' },
@@ -166,7 +170,7 @@ export class UsersService {
 
   async deactivate(authUser: SupabaseUser, userId: string) {
     const actor = await this.getActor(authUser);
-    const existing = await this.getScopedUser(actor, userId);
+    const existing = await this.getManageableUser(actor, userId);
     if (existing.id === actor.id) {
       throw new BadRequestException('You cannot deactivate your own account');
     }
@@ -202,7 +206,7 @@ export class UsersService {
 
   async addOverride(authUser: SupabaseUser, userId: string, input: CreatePermissionOverrideDto) {
     const actor = await this.getActor(authUser);
-    const user = await this.getScopedUser(actor, userId);
+    const user = await this.getManageableUser(actor, userId);
     const permission = await this.database.permission.findUnique({
       where: { code: input.permissionCode },
     });
@@ -233,7 +237,7 @@ export class UsersService {
 
   async removeOverride(authUser: SupabaseUser, userId: string, overrideId: string) {
     const actor = await this.getActor(authUser);
-    const user = await this.getScopedUser(actor, userId);
+    const user = await this.getManageableUser(actor, userId);
     const override = await this.database.permissionOverride.findFirst({
       where: { id: overrideId, userId: user.id },
       include: { permission: { select: { code: true } } },
@@ -260,7 +264,7 @@ export class UsersService {
 
   async invite(authUser: SupabaseUser, userId: string) {
     const actor = await this.getActor(authUser);
-    const existing = await this.getScopedUser(actor, userId);
+    const existing = await this.getManageableUser(actor, userId);
     await this.supabaseAuth.inviteManagedUser({
       email: existing.email,
       displayName: existing.displayName,
@@ -296,7 +300,7 @@ export class UsersService {
     input: AssignUserRoleDto,
   ) {
     const actor = await this.getActor(authUser);
-    const user = await this.getScopedUser(actor, userId);
+    const user = await this.getManageableUser(actor, userId);
     await this.assertRolesCanBeAssigned(actor, [input.roleId]);
     const role = await this.database.role.findUnique({
       where: { id: input.roleId },
@@ -320,7 +324,7 @@ export class UsersService {
 
   async removeRole(authUser: SupabaseUser, userId: string, roleId: string) {
     const actor = await this.getActor(authUser);
-    const user = await this.getScopedUser(actor, userId);
+    const user = await this.getManageableUser(actor, userId);
     const role = await this.database.role.findUnique({ where: { id: roleId } });
     if (!role) {
       throw new NotFoundException('Role not found');
@@ -462,9 +466,25 @@ export class UsersService {
     if (roles.length !== new Set(roleIds).size) {
       throw new NotFoundException('One or more roles were not found');
     }
-    if (!this.isSuperAdmin(actor) && roles.some((role) => role.name === 'Super Admin')) {
-      throw new ForbiddenException('School Admin cannot assign the Super Admin role');
+    if (!this.isSuperAdmin(actor) && roles.some((role) => SENIOR_ROLES.includes(role.name))) {
+      throw new ForbiddenException(
+        'Only a Super Admin can create Super Admin, School Admin, Principal or Accountant accounts',
+      );
     }
+  }
+
+  /** A user the actor may change: in scope, and not a senior account unless the actor is a Super Admin. */
+  private async getManageableUser(
+    actor: Awaited<ReturnType<UsersService['getActor']>>,
+    userId: string,
+  ) {
+    const user = await this.getScopedUser(actor, userId);
+    if (!this.isSuperAdmin(actor) && user.roles.some(({ role }) => SENIOR_ROLES.includes(role.name))) {
+      throw new ForbiddenException(
+        'Only a Super Admin can change Super Admin, School Admin, Principal or Accountant accounts',
+      );
+    }
+    return user;
   }
 
   private async assertNotLastActiveSchoolAdmin(

@@ -66,8 +66,8 @@ reaches Super Admin the next time `npm run prisma:seed` runs.
 **Things to know:**
 
 - It can give both exam approvals, so it can release results on its own.
-- On a Tier 4 request it can fill either slot, but one person still cannot approve the same
-  request twice, so a second approver is always needed.
+- On a Tier 4 request it can fill the School Admin's slot, not the Principal's.
+- It cannot approve fee discounts or decide staff leave; only the Principal can.
 - It can give any user extra permissions, and no check stops it doing so for itself.
 - Nothing is deleted permanently: schools, users and students are archived or deactivated.
 
@@ -90,20 +90,18 @@ Runs the school day to day.
 | Approve and release slip tests | Done | Done (web) |
 | Student list and search; assign NFC cards | Done | Done (web) |
 | Attendance view and CSV export | Done | Done (web) |
-| Approve Tier 3 and Tier 4 change requests | Done | Done (web) |
+| Approve Tier 3 and Tier 4 change requests (not fee discounts) | Done | Done (web) |
 | Academic years, enrollment, promotion, transfers | Done | Not built |
 | Register and edit students; guardians and parent logins | Done | Not built |
 | Mark or correct attendance on the web | Done | Not built |
 | Fees, payments, receipts, discounts, refunds | Done | Not built |
-| Timetables, substitutes, student and staff leave | Done | Not built |
+| Timetables, substitutes, student leave (staff leave is decided by the Principal) | Done | Not built |
 | Complaints, certificates, announcements, homework | Done | Not built |
 | Transport, library, assets | Done | Not built |
-| Users, roles, overrides; audit search and reports | Done | Not built |
+| Users, roles, overrides for teachers and students only (Super Admin creates and changes Principal, School Admin and Accountant accounts); audit search and reports | Done | Not built |
 
 **Problems:**
 
-- A School Admin can still assign the Principal and School Admin roles, which goes against
-  the hierarchy in the [architecture doc](../school-erp-architecture.md) (section 2.4).
 - A School Admin can file a Tier 4 change as Tier 3 through `POST /approval-requests` and
   approve it alone. See [Known problems](#known-problems).
 

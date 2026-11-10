@@ -24,6 +24,13 @@ export type ApprovalHandler = (
 export interface ApprovalDefinition {
   onApproved: ApprovalHandler;
   onRejected?: ApprovalHandler;
+  /** When false, the person who raised a request of this type cannot approve it. */
+  allowSelfApproval?: boolean;
+  /**
+   * Who must approve requests of this type, overriding the tier's default slots (e.g. only the
+   * Principal). Set on the type so no caller can pick an easier approver.
+   */
+  approverRoles?: string[];
 }
 
 export interface CreateApprovalInput {
@@ -75,7 +82,8 @@ export class ApprovalEngine {
       throw new ConflictException('A pending request already exists for this record');
     }
     const requiredRoles =
-      input.tier === 4 ? [ROLE.SCHOOL_ADMIN, ROLE.PRINCIPAL] : [LEADER_SLOT];
+      this.definitions.get(input.type)?.approverRoles ??
+      (input.tier === 4 ? [ROLE.SCHOOL_ADMIN, ROLE.PRINCIPAL] : [LEADER_SLOT]);
     const request = await this.database.$transaction(async (transaction) => {
       const created = await transaction.approvalRequest.create({
         data: {
@@ -91,7 +99,7 @@ export class ApprovalEngine {
           documentFileId: input.documentFileId,
         },
       });
-      if (input.tier === 4 && this.canFill(context, ROLE.SCHOOL_ADMIN)) {
+      if (input.tier === 4 && requiredRoles.includes(ROLE.SCHOOL_ADMIN) && this.canFill(context, ROLE.SCHOOL_ADMIN)) {
         await transaction.approvalDecision.create({
           data: {
             requestId: created.id,
@@ -116,7 +124,12 @@ export class ApprovalEngine {
       );
       return created;
     });
-    await this.notify.toRoles(context.schoolId, [ROLE.SCHOOL_ADMIN, ROLE.PRINCIPAL], {
+    const approverRoles = [
+      ...new Set(
+        requiredRoles.flatMap((role) => (role === LEADER_SLOT ? [ROLE.SCHOOL_ADMIN, ROLE.PRINCIPAL] : [role])),
+      ),
+    ];
+    await this.notify.toRoles(context.schoolId, approverRoles, {
       type: 'approval.requested',
       title: 'Approval needed',
       body: `${context.displayName} requested: ${input.type} (${input.reason})`,
@@ -133,6 +146,12 @@ export class ApprovalEngine {
     });
     if (decided.some((decision) => decision.approverId === context.userId)) {
       throw new ConflictException('You have already decided on this request');
+    }
+    if (
+      this.definitions.get(request.type)?.allowSelfApproval === false &&
+      request.requesterId === context.userId
+    ) {
+      throw new ForbiddenException('You cannot approve a request you raised');
     }
     const open = request.requiredRoles.filter(
       (role) => !decided.some((decision) => decision.role === role),
@@ -254,9 +273,8 @@ export class ApprovalEngine {
     if (role === ROLE.SCHOOL_ADMIN) {
       return context.isSchoolAdmin || context.isSuperAdmin;
     }
-    // Super Admin has full access and can fill any slot. One person still cannot fill two slots
-    // on the same request, so Tier 4 always needs a second approver.
-    return context.isSuperAdmin || context.roles.includes(role);
+    // Any other slot (such as the Principal's) is filled only by someone holding that role.
+    return context.roles.includes(role);
   }
 
   private async pending(context: SchoolContext, requestId: string) {

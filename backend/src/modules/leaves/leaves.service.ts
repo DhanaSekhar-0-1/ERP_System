@@ -253,7 +253,8 @@ export class LeavesService {
       },
       include: this.staffInclude(),
     });
-    await this.notify.toRoles(context.schoolId, [ROLE.PRINCIPAL, ROLE.SCHOOL_ADMIN], {
+    // Only the Principal decides staff leave, so only the Principal is asked.
+    await this.notify.toRoles(context.schoolId, [ROLE.PRINCIPAL], {
       type: 'staff-leave.requested',
       title: 'Staff leave request',
       body: `${context.displayName} requested ${days} day(s) ${input.leaveType.toLowerCase()} leave`,
@@ -299,7 +300,12 @@ export class LeavesService {
     note?: string,
   ) {
     const context = await this.access.schoolContext(authUser);
-    this.access.assertLeader(context, 'Only the Principal or School Admin can decide staff leave');
+    if (!context.isPrincipal) {
+      throw new ForbiddenException('Only the Principal can approve or reject staff leave');
+    }
+    if (decision === 'REJECTED' && !note?.trim()) {
+      throw new BadRequestException('Give a reason when rejecting leave, so the teacher knows why');
+    }
     const leave = await this.findStaffLeave(authUser, leaveId);
     if (leave.status !== 'PENDING') {
       throw new ConflictException(`Leave request is already ${leave.status.toLowerCase()}`);

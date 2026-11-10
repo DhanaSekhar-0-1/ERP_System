@@ -472,8 +472,14 @@ async function main() {
   // Filter by this run's structure: the student's fees from earlier runs push it past page one.
   const fee = (await call(student, 'GET', `/student-fees?feeStructureId=${structure.id}`)).data?.[0];
   check('balance is 13000', fee?.balance === 13000, fee?.balance);
-  const discount = (await expect('discount applied directly by School Admin', admin, 'POST', `/student-fees/${fee.id}/apply-discount`, { amount: 1000, reason: 'Sibling discount' })).data;
-  check('discount reduces balance to 12000', discount?.studentFee?.balance === 12000, discount?.studentFee?.balance);
+  const discount = (await expect('discount is raised as a request', admin, 'POST', `/student-fees/${fee.id}/apply-discount`, { amount: 1000, reason: 'Sibling discount' })).data;
+  const discountRequest = discount?.approvalRequest;
+  check('discount is not applied before approval', discount?.applied === false && discountRequest?.requiredRoles?.join() === 'Principal', discount);
+  check('balance unchanged while pending', (await call(student, 'GET', `/student-fees?feeStructureId=${structure.id}`)).data?.[0]?.balance === 13000);
+  await expect('School Admin cannot approve a discount', admin, 'POST', `/approval-requests/${discountRequest?.id}/approve`, {}, 403);
+  await expect('Principal approves the discount', principal, 'POST', `/approval-requests/${discountRequest?.id}/approve`, { note: 'Sibling in Class 5' });
+  const discounted = (await call(student, 'GET', `/student-fees?feeStructureId=${structure.id}`)).data?.[0];
+  check('discount reduces balance to 12000', discounted?.balance === 12000, discounted?.balance);
   await expect('overpayment rejected', admin, 'POST', '/payments', { studentFeeId: fee.id, amount: 20000, method: 'CASH' }, 400);
   const cash = (await expect('record cash payment', admin, 'POST', '/payments', { studentFeeId: fee.id, amount: 5000, method: 'CASH', reference: 'Counter 1' })).data;
   check('cash verified with receipt', cash?.status === 'VERIFIED' && cash.receiptNo?.startsWith('RCPT-'), cash);
@@ -547,7 +553,9 @@ async function main() {
   })).data;
   if (!staffLeave) throw new Error('staff leave was not created');
   await expect('teacher cannot approve own leave', teacher, 'POST', `/staff-leaves/${staffLeave.id}/approve`, {}, 403);
-  const approvedLeave = (await expect('admin approves staff leave', admin, 'POST', `/staff-leaves/${staffLeave.id}/approve`, {})).data;
+  await expect('School Admin cannot decide staff leave', admin, 'POST', `/staff-leaves/${staffLeave.id}/approve`, {}, 403);
+  await expect('rejecting leave needs a reason', principal, 'POST', `/staff-leaves/${staffLeave.id}/reject`, {}, 400);
+  const approvedLeave = (await expect('Principal approves staff leave', principal, 'POST', `/staff-leaves/${staffLeave.id}/approve`, {})).data;
   check('substitute requests opened for timetabled periods', approvedLeave?.substitutesOpened >= 1, approvedLeave);
   const subs = (await expect('list substitute requests', admin, 'GET', '/substitute-requests?status=OPEN')).data;
   const sub = subs?.find((s) => s.originalStaffId === teacherStaff.id);
@@ -702,6 +710,23 @@ async function main() {
   await expect('security: suspicious activity', admin, 'GET', '/security-events/suspicious-activity');
   await expect('teacher cannot read audit log', teacher, 'GET', '/audit-logs', undefined, 403);
   await expect('built-in role cannot be renamed', admin, 'GET', '/roles');
+
+  heading('Senior accounts are Super Admin only');
+  const roleList = (await call(admin, 'GET', '/roles')).data ?? [];
+  const roleId = (name) => roleList.find((r) => r.name === name)?.id;
+  for (const name of ['Principal', 'School Admin', 'Accountant']) {
+    await expect(`School Admin cannot create ${name === 'Accountant' ? 'an' : 'a'} ${name} account`, admin, 'POST', '/users', {
+      email: `blocked.${RUN}@erp.local`, displayName: 'Blocked', password: `Blocked#${RUN}`, roleIds: [roleId(name)],
+    }, 403);
+  }
+  const principalUser = (await call(admin, 'GET', '/users')).data?.find((u) => u.email === creds.principal.email);
+  check('Principal account found', principalUser);
+  await expect('School Admin cannot change the Principal account', admin, 'PATCH', `/users/${principalUser?.id}`, { displayName: 'Changed by Admin' }, 403);
+  await expect('School Admin cannot deactivate the Principal', admin, 'POST', `/users/${principalUser?.id}/deactivate`, undefined, 403);
+  await expect('School Admin cannot give the Principal extra permissions', admin, 'POST', `/users/${principalUser?.id}/permission-overrides`, {
+    permissionCode: 'homework:read', effect: 'GRANT', reason: 'Test',
+  }, 403);
+  await expect('School Admin cannot make the student a Principal', admin, 'POST', `/users/${studentMe.id}/roles`, { roleId: roleId('Principal') }, 403);
 
   heading('Class, section and subject management');
   const manager = creds.superAdmin ? await login(creds.superAdmin.email, creds.superAdmin.password) : admin;
