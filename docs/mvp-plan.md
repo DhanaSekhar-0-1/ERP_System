@@ -114,6 +114,14 @@ The Principal's own salary and leave are not kept in the app.
 - **Roll number** is the next free one in the section.
 - **Optional in MVP1:** relation, other parent, second mobile, email, blood group, mother
   tongue, photo, address, PIN.
+- **Checks on every field (form and import alike):** names in **English letters** only
+  (letters, spaces, `.`, `'`, `-`; up to 80 characters), because school records use them and the
+  family name makes the first password; admission number up to 40 letters, numbers, `/ - .`;
+  dates must exist (31 February is refused); an enrolment slip number needs at least 14 digits,
+  so an Aadhaar typed with 10 to 13 digits is caught as a typo; free text (address, previous
+  school and so on) has a length limit and cannot contain `< >`, control characters, or start
+  with `= + @`. Tested with a 52-row sheet of correct, false and manipulated data (2026-11-10):
+  every correct row saved as typed, every wrong row refused with its sheet row and reason.
 - **New to this school:** previous school name, last class passed, percentage in that class,
   and the previous school's TC uploaded. **Already studying here:** no previous-school details
   or documents.

@@ -292,6 +292,26 @@ async function main() {
   check('dry run saves nothing and lists the problem rows', dry?.imported === 0 && dry?.readyToImport === 1 && dry?.problems?.length === 2, dry);
   check('problems name the row and the reason', dry?.problems?.some((p) => p.row === 3 && p.errors.some((e) => e.includes('mobile'))) && dry?.problems?.some((p) => p.row === 4 && p.errors.some((e) => e.includes('twice'))), dry?.problems);
   check('an already registered admission number is skipped, not a problem', dry?.alreadyRegistered?.some((r) => r.row === 5), dry?.alreadyRegistered);
+  // Weaknesses found with a 44-row test sheet; each row must be refused with the right reason.
+  const hostile = [
+    ['an Aadhaar with a digit missing', { aadhaar_or_enrolment_no: testAadhaar().slice(0, 11) }, 'needs exactly 12'],
+    ['31 February', { date_of_birth: '31/02/2015' }, 'date of birth is missing or not a date'],
+    ['a script tag as a name', { first_name: '<script>alert(1)</script>' }, 'first name can only contain'],
+    ['SQL text as a name', { first_name: "Robert'); DROP TABLE students;--" }, 'first name can only contain'],
+    ['a formula as a name', { first_name: '=HYPERLINK("http://x","y")' }, 'first name can only contain'],
+    ['a 500-character name', { first_name: 'A'.repeat(500) }, 'longer than 80'],
+    ['a 5000-character address', { address: 'B'.repeat(5000) }, 'address is longer than 300'],
+    ['a 90-character admission number', { admission_no: `E2E-${'9'.repeat(86)}` }, 'admission number is longer than 40'],
+    ['a family name in Telugu script', { family_name: 'సాయి' }, 'family name must be written in English letters'],
+    ['an address starting with =', { address: '=1+1' }, 'cannot start with ='],
+  ];
+  const hostileRows = hostile.map(([, over], i) => importRow({ admission_no: `E2E-H${i}-${RUN}`, nfc_card_id: `NFC-H${i}-${RUN}`, aadhaar_or_enrolment_no: testAadhaar(), ...over }));
+  const hostileDry = (await expect('dry run of wrong and manipulated rows', admin, 'POST', '/students/import', { dryRun: true, rows: hostileRows }, 201)).data;
+  hostile.forEach(([name, , reason], i) => {
+    const problem = hostileDry?.problems?.find((x) => x.row === i + 2);
+    check(`refused: ${name}`, problem?.errors?.some((e) => e.includes(reason)), problem?.errors);
+  });
+  check('none of the manipulated rows is ready to import', hostileDry?.readyToImport === 0, hostileDry?.readyToImport);
   const blocked = (await expect('a real run with problems saves nothing', admin, 'POST', '/students/import', { dryRun: false, rows: sheet }, 201)).data;
   check('nothing imported while any row has a problem', blocked?.imported === 0 && blocked?.problems?.length === 2, blocked);
   const imported = (await expect('import the clean sheet', admin, 'POST', '/students/import', { dryRun: false, rows: [goodRow, sheet[3]] }, 201)).data;

@@ -57,6 +57,11 @@ interface BatchSeen {
 }
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+/** Names: English letters, spaces, full stops, apostrophes and hyphens, starting with a letter. */
+const NAME = /^[A-Za-z][A-Za-z .'-]*$/;
+const ADMISSION_NO = /^[A-Za-z0-9][A-Za-z0-9/ .-]*$/;
+const CARD_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]*$/;
+const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const MAX_IMPORT_ROWS = 500;
 
 /**
@@ -188,7 +193,7 @@ export class StudentRegistrationService {
     rules: RegistrationRules,
     seen: BatchSeen,
   ): Promise<{ prepared: PreparedStudent } | { errors: string[]; alreadyRegistered: boolean }> {
-    const errors: string[] = [];
+    const errors: string[] = this.formatErrors(input);
     let alreadyRegistered = false;
 
     const admissionNo = input.admissionNo?.trim() ?? '';
@@ -221,10 +226,6 @@ export class StudentRegistrationService {
       if (input.sectionId) errors.push('section not found in this school');
     }
 
-    if (!input.firstName?.trim()) errors.push('first name is required');
-    if (!input.familyName?.trim() || !/[A-Za-z]/.test(input.familyName)) {
-      errors.push('family name is required and needs at least one letter');
-    }
     if (!Object.values(Gender).includes(input.gender)) errors.push('gender must be MALE, FEMALE or OTHER');
 
     const dob = this.date(input.dateOfBirth);
@@ -236,7 +237,6 @@ export class StudentRegistrationService {
       if (admissionDate && dob >= admissionDate) errors.push('date of birth is after the admission date');
     }
 
-    if (!input.parentName?.trim()) errors.push("parent's name is required");
     const parentMobile = input.parentMobile ? normaliseMobile(input.parentMobile) : null;
     if (!parentMobile) errors.push("parent's mobile must be a 10-digit mobile number");
     let otherParentMobile: string | null = null;
@@ -266,7 +266,17 @@ export class StudentRegistrationService {
           errors.push(`this Aadhaar number is already registered to admission number ${taken.admissionNo}`);
         }
       }
-    } else if (rules.requireAadhaar && !input.aadhaarEnrolmentNo?.trim()) {
+    } else if (input.aadhaarEnrolmentNo?.trim()) {
+      // An Aadhaar enrolment slip number has at least 14 digits. A run of 10 to 13 digits is
+      // almost always an Aadhaar number with a digit missing or extra, so it is not accepted.
+      const slip = input.aadhaarEnrolmentNo.trim();
+      const digits = slip.replace(/\D/g, '');
+      if (/^[\d\s-]+$/.test(slip) && digits.length >= 10 && digits.length <= 13) {
+        errors.push(`Aadhaar number has ${digits.length} digits; it needs exactly 12`);
+      } else if (digits.length < 14) {
+        errors.push('enrolment slip number must have at least 14 digits');
+      }
+    } else if (rules.requireAadhaar) {
       errors.push('Aadhaar number, or the enrolment slip number if it is not issued yet, is required');
     }
 
@@ -615,9 +625,72 @@ export class StudentRegistrationService {
     return text.slice(0, 10);
   }
 
+  /** A real calendar date: 2015-02-31 is refused instead of quietly becoming 3 March. */
   private date(value: string | undefined): Date | null {
-    if (!value || !/^\d{4}-\d{2}-\d{2}/.test(value)) return null;
-    const date = new Date(value.slice(0, 10));
-    return Number.isNaN(date.getTime()) ? null : date;
+    const match = value ? /^(\d{4})-(\d{2})-(\d{2})/.exec(value) : null;
+    if (!match) return null;
+    const [, year, month, day] = match.map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+      ? date
+      : null;
+  }
+
+  /**
+   * Shape and length of every text field, the same for the form and the import (the import
+   * does not pass through the form's DTO limits). Names must be in English letters because
+   * school records use them and the family name makes the first password.
+   */
+  private formatErrors(input: StudentInput): string[] {
+    const errors: string[] = [];
+    const name = (label: string, value: string | undefined, required: boolean, max = 80) => {
+      const text = value?.trim() ?? '';
+      if (!text) {
+        if (required) errors.push(`${label} is required`);
+        return;
+      }
+      if (text.length > max) errors.push(`${label} is longer than ${max} characters`);
+      else if (/[^\x00-\x7F]/.test(text)) errors.push(`${label} must be written in English letters`);
+      else if (!NAME.test(text)) {
+        errors.push(`${label} can only contain letters, spaces, full stops, apostrophes and hyphens`);
+      }
+    };
+    name('first name', input.firstName, true);
+    name('family name', input.familyName, true);
+    name("parent's name", input.parentName, true);
+    name("other parent's name", input.otherParentName, false);
+    name('parent relation', input.parentRelation, false, 30);
+
+    const admissionNo = input.admissionNo?.trim() ?? '';
+    if (admissionNo.length > 40) errors.push('admission number is longer than 40 characters');
+    else if (admissionNo && !ADMISSION_NO.test(admissionNo)) {
+      errors.push('admission number can only contain letters, numbers, /, -, . and spaces');
+    }
+    const card = input.nfcId?.trim() ?? '';
+    if (card.length > 64) errors.push('NFC card ID is longer than 64 characters');
+    else if (card && !CARD_ID.test(card)) errors.push('NFC card ID can only contain letters, numbers, :, _ and -');
+    const roll = input.rollNumber?.trim() ?? '';
+    if (roll && !/^[A-Za-z0-9]{1,10}$/.test(roll)) errors.push('roll number must be up to 10 letters or numbers');
+    const email = input.email?.trim() ?? '';
+    if (email && (email.length > 120 || !EMAIL.test(email))) errors.push('email is not a valid email address');
+
+    // Free text: limited length, no markup or control characters, and no leading = + @ that a
+    // spreadsheet would run as a formula when the data is exported.
+    const free: [string, string | undefined, number][] = [
+      ['address', input.address, 300],
+      ['mother tongue', input.motherTongue, 40],
+      ['previous school', input.previousSchool, 120],
+      ['last class passed', input.lastClassPassed, 30],
+      ['previous TC number', input.previousTcNumber, 40],
+      ['enrolment slip number', input.aadhaarEnrolmentNo, 40],
+    ];
+    for (const [label, value, max] of free) {
+      const text = value?.trim() ?? '';
+      if (!text) continue;
+      if (text.length > max) errors.push(`${label} is longer than ${max} characters`);
+      else if (/[<>\x00-\x1F\x7F]/.test(text)) errors.push(`${label} cannot contain < > or control characters`);
+      else if (/^[=+@]/.test(text)) errors.push(`${label} cannot start with =, + or @`);
+    }
+    return errors;
   }
 }

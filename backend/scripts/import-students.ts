@@ -201,8 +201,13 @@ function fileDuplicates(rows: SheetRow[]) {
       if (!raw) continue;
       const key = column === 'aadhaar_or_enrolment_no' ? raw.replace(/\D/g, '') : raw.toUpperCase();
       const first = seen.get(key);
-      if (first) problems.push({ row: sheetRow, message: `${column} ${raw} is also on row ${first}` });
-      else seen.set(key, sheetRow);
+      if (first) {
+        // Name both rows, so the office can see which pair clashes.
+        problems.push({ row: sheetRow, message: `${column} ${raw} is also on row ${first}` });
+        problems.push({ row: first, message: `${column} ${raw} is also on row ${sheetRow}` });
+      } else {
+        seen.set(key, sheetRow);
+      }
     }
   }
   return problems;
@@ -233,8 +238,13 @@ async function signIn(): Promise<string> {
   return session.session.access_token;
 }
 
+/**
+ * One CSV field. A value starting with = + - @ (or a tab or return) would run as a formula when
+ * the file is opened in Excel, so it gets a leading apostrophe and is shown as plain text.
+ */
 function csvCell(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 async function writeTemplate(path: string) {
@@ -302,6 +312,8 @@ async function main() {
     else problems.push({ row: d.row, admissionNo: rows.find((r) => r.sheetRow === d.row)?.values.admission_no ?? null, errors: [d.message] });
   }
   problems.sort((a, b) => a.row - b.row);
+  // The API counts each batch on its own; rows flagged here (file-wide duplicates) are not ready.
+  ready = Math.min(ready, rows.length - skipped.length - problems.length);
 
   console.log(`\nReady to import: ${ready}`);
   console.log(`Already registered (will be skipped): ${skipped.length}${skipped.length ? ` (rows ${skipped.map((s) => s.row).join(', ')})` : ''}`);
