@@ -42,7 +42,7 @@ Shared services in `src/common`:
 |---|---|
 | Prisma schema and migrations | Current (14 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 480/480 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 517/517 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
@@ -63,7 +63,7 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 | Academic years | Done | Activate, close, rollover (copy structure, optional promotion), summary |
 | Classes, sections, subjects | Done | A new class gets Section A; every new section gets its own copy of the school's default subjects (Sanskrit optional and off). Subjects are per section, so renaming or switching one off affects that section only. Delete is refused while students, exams, homework, fees or timetables depend on it; a class keeps at least one section. Web: Classes & Sections with Sections, Subjects, Teacher assignments and Students tabs, and Settings for the default subjects |
 | Staff and assignments | Done | One teacher per section subject and one class teacher per section (own table). A section subject can be assigned only in its own section while switched on. Teacher access is read from current assignments on every request, so removing one revokes it at once. Web: Teacher Assignments page |
-| Students | Done | Scoped reads, Tier 4 identity changes, archive/restore, history, documents |
+| Students | Done | Registration by School Admin or Super Admin only, straight into a section with the next roll number and the parent as primary guardian; admission number is the login, first password made from family name and parent mobile and changed at first login; Aadhaar encrypted (AES-256-GCM, `PII_ENCRYPTION_KEY`), shown masked, full only to the student and Accountant; Excel import with a dry run (`POST /students/import`); scoped reads, Tier 4 identity changes, archive/restore, history, documents |
 | Guardians and parents | Done | Parent logins, children links, `/me` routes, Tier 1 contact edits |
 | Enrollments | Done | Transfer (Tier 3), promote, withdraw |
 | Attendance | Done | Daily attendance is marked by the section's class teacher or school leadership; subject teachers can view it. ON_LEAVE status, bulk, 48-hour Tier 2 edits, Tier 3 corrections, summary, CSV export |
@@ -101,6 +101,13 @@ then hiding the parent login and unused modules, hosting, and a device test. Alo
 2. A separate client database and hosting for the one-month pilot.
 3. Try real cards on an NFC phone.
 4. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+
+Done 2026-11-10: MVP1 student registration (step 4). `POST /students` takes the agreed form;
+`POST /students/import` checks or imports Excel rows; students sign in with the admission
+number; a generated first password must be changed before any other route works;
+`GET /students/:id/aadhaar` shows the full number to the student or Accountant only, logged.
+Per-school switches `registration.requireAadhaar` and `registration.requireNfcCard` in school
+settings metadata (both on by default) let a pilot run without them.
 
 Done 2026-11-10: MVP1 database fields (migration `20261110100000_mvp1_registration_fields`):
 student gender, admission date and type, blood group, mother tongue, PIN code, Aadhaar stored

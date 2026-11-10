@@ -81,6 +81,15 @@ pulling changes; it only adds. Super Admin gets every permission any role has.
 - The Parent role and its routes remain, but the agreed plan removes the parent login from
   the apps; the family uses the student's login.
 
+**Student registration** (`StudentRegistrationService`): only the School Admin or Super Admin.
+`POST /students` and `POST /students/import` (Excel rows, `dryRun` first) run the same checks.
+The admission number is the login ID; the first password is the first 4 letters of the family
+name, `@`, and the last 4 digits of the parent's mobile, and `users.must_change_password` keeps
+every route except those marked `@AllowBeforePasswordChange` closed until it is changed.
+Aadhaar is stored only as AES-256-GCM ciphertext, last 4 digits and a keyed hash
+(`common/identity/aadhaar.ts`), needs `PII_ENCRYPTION_KEY` (32 random bytes, base64; keep it
+backed up), and is left out of every query by `DatabaseService` unless selected explicitly.
+
 **Sensitivity tiers.** Changes follow the architecture document:
 
 | Tier | Behaviour | Examples |

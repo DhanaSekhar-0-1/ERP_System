@@ -40,7 +40,7 @@ Admin limited to their own school.
 |---|---|---|
 | Principal, Admin, Accountant | Super Admin only | Built (2026-11-10) |
 | Teacher | Super Admin or Admin | Built |
-| Student | Super Admin or Admin, one by one or from Excel | Change (new fields, Excel import) |
+| Student | Super Admin or Admin, one by one or from Excel | Built (2026-11-10) |
 
 A School Admin cannot give or change the Super Admin, School Admin, Principal or Accountant
 roles, or change the users who hold them.
@@ -205,8 +205,8 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 2 | Account, leave and discount rules | Done 2026-11-10 (`c66f3c0`) |
 | 2a | Approval loophole: requests only from their own routes; someone other than the requester must approve | Done 2026-11-10 |
 | 3 | Database changes for teacher and student fields, and moving existing records over | Done 2026-11-10 (migration `20261110100000_mvp1_registration_fields`) |
-| 4 | Student creation: admission-number login, first password, forced change, import endpoint with a dry run | Next |
-| 5 | Teacher registration: app-made ID, subjects | |
+| 4 | Student creation: admission-number login, first password, forced change, import endpoint with a dry run | Done 2026-11-10 |
+| 5 | Teacher registration: app-made ID, subjects | Next |
 | 6 | Teacher check-in and the Admin attendance dashboard | |
 | 7 | Leave screens on web and phone | |
 | 8 | Hide parent login and unused modules; host; Android build; device test | |
@@ -224,6 +224,14 @@ required.
 
 ## 6. Excel import
 
+- **Endpoint (built):** `POST /students/import` with `{ "dryRun": true, "rows": [...] }`, one
+  object per sheet row keyed by the column names above (plus optional roll_number,
+  admission_type, parent_relation, other_parent_name, other_parent_mobile, email, blood_group,
+  mother_tongue, address, pin_code, previous_school, last_class_passed, previous_percentage,
+  previous_tc_number). Class may be written "Class 8" or "8"; dates as 12/06/2026 or
+  2026-06-12; gender as M/F; one column holds Aadhaar or, when not issued, the slip number. Up to
+  500 rows a call; the response lists problem rows, rows already registered (skipped) and, after
+  a real run, each login with its first password.
 - **Pilot:** no screen. A script run by the developer sends the school's Excel file to the
   import endpoint: a dry run lists problem rows (for example "Row 14: parent mobile has 9
   digits"), the school fixes the sheet, then the real run creates the records. Re-running skips
@@ -237,7 +245,9 @@ required.
 
 - Two or three classes of 2026–27, with the school's written consent to hold the data.
 - A separate database for the client, not the development one, with a nightly backup.
-- For the pilot, Aadhaar and the NFC card may be optional if the school has not collected them.
+- For the pilot, Aadhaar and the NFC card may be optional if the school has not collected them:
+  set `registration.requireAadhaar` / `registration.requireNfcCard` to `false` in the school
+  settings metadata.
 - Every school day: class teachers mark attendance on the phone before a set time (for example
   10 am); the Admin checks the dashboard; the developer checks marking and errors each evening;
   a WhatsApp group for problems.

@@ -154,7 +154,12 @@ export class SupabaseAuthService implements OnModuleInit {
 
     await this.recordAttempt(identifier, true);
     await this.recordSession(data.session);
-    return data;
+    const erpUser = await this.database.user.findUnique({
+      where: { authUserId: data.user.id },
+      select: { mustChangePassword: true },
+    });
+    // Apps show the "choose a new password" screen first when this is true.
+    return { ...data, mustChangePassword: erpUser?.mustChangePassword ?? false };
   }
 
   async refresh(input: RefreshTokenDto) {
@@ -452,12 +457,16 @@ export class SupabaseAuthService implements OnModuleInit {
     });
   }
 
+  /**
+   * Turns what the user typed into the login email: an email as is, a student's admission
+   * number, or (older accounts) a student or staff profile ID.
+   */
   private async resolveLoginEmail(identifier: string): Promise<string> {
     if (identifier.includes('@')) {
       return identifier;
     }
     if (!isUUID(identifier)) {
-      throw new UnauthorizedException('Invalid student ID or password');
+      return this.emailForAdmissionNumber(identifier);
     }
     const student = await this.database.student.findUnique({
       where: { id: identifier },
@@ -474,5 +483,26 @@ export class SupabaseAuthService implements OnModuleInit {
       throw new UnauthorizedException('Invalid student ID or password');
     }
     return staff.user.email;
+  }
+
+  /**
+   * Admission numbers are unique within a school, not across schools. With one school this is
+   * always one student; if two schools share a number, the student signs in with the email
+   * shown on their account instead.
+   */
+  private async emailForAdmissionNumber(admissionNo: string): Promise<string> {
+    const matches = await this.database.student.findMany({
+      where: {
+        admissionNo: { equals: admissionNo, mode: 'insensitive' },
+        isArchived: false,
+        userId: { not: null },
+      },
+      select: { user: { select: { email: true } } },
+      take: 2,
+    });
+    if (matches.length !== 1 || !matches[0].user?.email) {
+      throw new UnauthorizedException('Invalid admission number or password');
+    }
+    return matches[0].user.email;
   }
 }

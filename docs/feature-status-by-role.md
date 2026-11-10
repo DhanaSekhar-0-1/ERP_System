@@ -96,7 +96,7 @@ Runs the school day to day.
 | Attendance view and CSV export | Done | Done (web) |
 | Approve Tier 3 and Tier 4 change requests (not fee discounts) | Done | Done (web) |
 | Academic years, enrollment, promotion, transfers | Done | Not built |
-| Register and edit students; guardians and parent logins | Done | Not built |
+| Register students (form or Excel import with a dry run), edit students; guardians | Done | Not built |
 | Mark or correct attendance on the web | Done | Not built |
 | Fees, payments, receipts, discounts, refunds | Done | Not built |
 | Timetables, substitutes, student leave (staff leave is decided by the Principal) | Done | Not built |
@@ -152,7 +152,7 @@ by the School Admin applies at once.
 | Read notices | Done | Built, unverified (mobile) |
 | Mark corrections after submission (Tier 3) or release (Tier 4) | Done | Not built |
 | Homework: create, publish, grade, return | Done | Not built |
-| Register students; view assigned students | Done | Not built |
+| View assigned students (registering students is for the School Admin and Super Admin since 2026-11-10) | Done | Not built |
 | Own timetable, substitute duties, own leave | Done | Not built |
 
 **Cannot do:** edit student details, change classes, sections, subjects or assignments, or
@@ -225,7 +225,8 @@ requests and Aadhaar Reveal; fee screens in MVP3.
 
 ## Known problems
 
-1. **A card ID is required to register a student.**
+1. **Students registered before 2026-11-10** have no gender, admission date, parent link or
+   Aadhaar; they still sign in with their old login ID until those details are added.
 2. **Older school-wide subjects** (created before subjects became per-section) do not appear
    on the new screens. Assignments that use them still work, and they cover the section
    subjects with the same code in exams.

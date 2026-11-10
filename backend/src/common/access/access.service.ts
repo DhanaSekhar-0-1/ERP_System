@@ -29,6 +29,8 @@ export interface AccessContext {
   isStudent: boolean;
   /** School Admin, Principal or Super Admin: full read across the school. */
   isLeader: boolean;
+  /** Still on a generated first password; only a few routes are allowed until it changes. */
+  mustChangePassword: boolean;
 }
 
 export type SchoolContext = AccessContext & { schoolId: string };
@@ -250,6 +252,7 @@ export class AccessService {
         email: true,
         displayName: true,
         status: true,
+        mustChangePassword: true,
         organizationId: true,
         schoolId: true,
         school: { select: { isArchived: true } },
@@ -319,6 +322,7 @@ export class AccessService {
       isParent: roles.includes(ROLE.PARENT),
       isStudent: roles.includes(ROLE.STUDENT),
       isLeader: isSuperAdmin || isSchoolAdmin || isPrincipal,
+      mustChangePassword: user.mustChangePassword,
     };
   }
 }

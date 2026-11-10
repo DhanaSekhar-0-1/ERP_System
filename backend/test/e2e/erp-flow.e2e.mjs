@@ -23,6 +23,19 @@ let section = '';
 
 // ---------- helpers ----------
 
+// Verhoeff tables, to make Aadhaar-shaped test numbers that pass the real checksum.
+const VD = [[0,1,2,3,4,5,6,7,8,9],[1,2,3,4,0,6,7,8,9,5],[2,3,4,0,1,7,8,9,5,6],[3,4,0,1,2,8,9,5,6,7],[4,0,1,2,3,9,5,6,7,8],[5,9,8,7,6,0,4,3,2,1],[6,5,9,8,7,1,0,4,3,2],[7,6,5,9,8,2,1,0,4,3],[8,7,6,5,9,3,2,1,0,4],[9,8,7,6,5,4,3,2,1,0]];
+const VP = [[0,1,2,3,4,5,6,7,8,9],[1,5,7,6,2,8,3,0,9,4],[5,8,0,3,7,9,6,1,4,2],[8,9,1,6,0,4,3,5,2,7],[9,4,5,3,1,2,6,8,7,0],[4,2,8,6,5,7,3,9,0,1],[2,7,9,3,8,0,6,4,1,5],[7,0,4,6,9,1,3,2,5,8]];
+const VINV = [0,4,3,2,1,5,6,7,8,9];
+/** A random 12-digit number with a valid Aadhaar check digit (not a real person's). */
+function testAadhaar() {
+  let body = String(2 + Math.floor(Math.random() * 8));
+  while (body.length < 11) body += String(Math.floor(Math.random() * 10));
+  let c = 0;
+  [...body].reverse().forEach((d, i) => { c = VD[c][VP[(i + 1) % 8][Number(d)]]; });
+  return body + VINV[c];
+}
+
 function credentials() {
   const file = process.env.CREDENTIALS_FILE ?? resolve(process.cwd(), '..', 'test-org-school.txt');
   const text = readFileSync(file, 'utf8');
@@ -211,13 +224,83 @@ async function main() {
       academicYearId: year.id, classId: cls.id, sectionId: secA.id, rollNumber: '1',
     })).data;
   }
-  const newStudent = (await expect('teacher registers a second student', teacher, 'POST', '/students', {
-    admissionNo: `E2E-${RUN}`, nfcId: `NFC-E2E-${RUN}`, password: `Stud#${RUN}`, firstName: 'Ravi', lastName: 'Kumar', dateOfBirth: '2013-05-10',
-  })).data;
-  check('generated login id returned', newStudent?.loginId === newStudent?.id, newStudent);
-  const enrollment2 = (await expect('enroll second student in 8-B', admin, 'POST', '/enrollments', {
-    academicYearId: year.id, studentId: newStudent.id, classId: cls.id, sectionId: secB.id, rollNumber: '2',
-  })).data;
+  const aadhaar2 = testAadhaar();
+  const mobile2 = `98${RUN.slice(-8)}`;
+  const registration = {
+    admissionNo: `E2E-${RUN}`, admissionDate: '2026-09-02', admissionType: 'NEW_TO_SCHOOL', sectionId: secB.id,
+    firstName: 'Ravi', familyName: 'Kumar', gender: 'MALE', dateOfBirth: '2013-05-10',
+    parentName: 'Suresh Kumar', parentRelation: 'Father', parentMobile: `+91 ${mobile2.slice(0, 5)} ${mobile2.slice(5)}`,
+    aadhaarNumber: aadhaar2, nfcId: `nfc-e2e-${RUN}`,
+    previousSchool: 'ZPHS Tenali', lastClassPassed: 'Class 7', previousPercentage: 82.5,
+  };
+  await expect('teacher cannot register a student', teacher, 'POST', '/students', registration, 403);
+  await expect('new-to-school student needs previous school details', admin, 'POST', '/students', { ...registration, previousSchool: undefined, previousPercentage: undefined }, 400);
+  await expect('an invalid Aadhaar number is refused', admin, 'POST', '/students', { ...registration, aadhaarNumber: '234567890123' }, 400);
+  await expect('a 9-digit parent mobile is refused', admin, 'POST', '/students', { ...registration, parentMobile: '944012345' }, 400);
+  const newStudent = (await expect('School Admin registers a student into 8-B', admin, 'POST', '/students', registration, 201)).data;
+  check('login ID is the admission number', newStudent?.loginId === `E2E-${RUN}`, newStudent?.loginId);
+  check('first password is family name + @ + last 4 of mobile', newStudent?.firstPassword === `Kuma@${mobile2.slice(-4)}`, newStudent?.firstPassword);
+  check('student is put in 8-B with the next roll number', newStudent?.enrollment?.sectionId === secB.id && newStudent?.enrollment?.rollNumber === '1', newStudent?.enrollment);
+  check('card ID typed in lowercase is saved in uppercase', newStudent?.nfcId === `NFC-E2E-${RUN}`, newStudent?.nfcId);
+  check('Aadhaar comes back masked only', newStudent?.aadhaarMasked === `XXXX XXXX ${aadhaar2.slice(-4)}` && !('aadhaarEncrypted' in (newStudent ?? {})) && !('aadhaarHash' in (newStudent ?? {})), newStudent);
+  check('first password must be changed', newStudent?.mustChangePassword === true);
+  const enrollment2 = newStudent.enrollment;
+  await expect('the same admission number is refused', admin, 'POST', '/students', { ...registration, aadhaarNumber: testAadhaar(), nfcId: `NFC-E2E-X-${RUN}` }, 409);
+  await expect('the same Aadhaar under another admission number is refused', admin, 'POST', '/students', { ...registration, admissionNo: `E2E-A-${RUN}`, nfcId: `NFC-E2E-Y-${RUN}` }, 400);
+  await expect('the same card in a different case is refused', admin, 'POST', '/students', { ...registration, admissionNo: `E2E-D-${RUN}`, aadhaarNumber: testAadhaar(), nfcId: `NFC-E2E-${RUN}` }, 400);
+  const adminView = (await expect('admin opens the new student', admin, 'GET', `/students/${newStudent.id}`)).data;
+  check('admin sees Aadhaar masked, not stored values', adminView?.aadhaarMasked?.endsWith(aadhaar2.slice(-4)) && !('aadhaarEncrypted' in (adminView ?? {})) && !('aadhaarHash' in (adminView ?? {})), adminView);
+  check('parent saved as primary guardian', adminView?.guardians?.some((g) => g.isPrimary && g.guardian.phone === mobile2 && g.guardian.name === 'Suresh Kumar'), adminView?.guardians);
+  await expect('School Admin cannot see the full Aadhaar', admin, 'GET', `/students/${newStudent.id}/aadhaar`, undefined, 403);
+
+  heading('First login with the admission number');
+  const firstLogin = await call(null, 'POST', '/auth/login', { identifier: `e2e-${RUN}`, password: newStudent.firstPassword });
+  check('student signs in with admission number (any case) and first password', firstLogin.status === 201 && firstLogin.data?.mustChangePassword === true, firstLogin.status);
+  const fresh = firstLogin.data?.session?.access_token;
+  await expect('other routes are blocked until the password changes', fresh, 'GET', '/students', undefined, 403);
+  const freshMe = (await expect('who am I still works', fresh, 'GET', '/auth/me')).data?.erpUser;
+  check('/auth/me says the password must change', freshMe?.mustChangePassword === true, freshMe);
+  await expect('the new password must differ', fresh, 'POST', '/auth/change-password', { currentPassword: newStudent.firstPassword, newPassword: newStudent.firstPassword }, 400);
+  await expect('student sets a new password', fresh, 'POST', '/auth/change-password', { currentPassword: newStudent.firstPassword, newPassword: `Ravi#${RUN}` });
+  const relogin = await call(null, 'POST', '/auth/login', { identifier: `E2E-${RUN}`, password: `Ravi#${RUN}` });
+  check('signs in with the new password, no change needed', relogin.status === 201 && relogin.data?.mustChangePassword === false, relogin.status);
+  const ravi = relogin.data?.session?.access_token;
+  const raviList = (await expect('after the change, the student can use the app', ravi, 'GET', '/students')).data;
+  check('and sees only themself', raviList?.length === 1 && raviList[0].id === newStudent.id, raviList?.length);
+  const ownAadhaar = (await expect('the student sees their own full Aadhaar', ravi, 'GET', `/students/${newStudent.id}/aadhaar`)).data;
+  check('full Aadhaar matches what was registered', ownAadhaar?.aadhaar === aadhaar2, ownAadhaar);
+  await expect('the first password no longer works', null, 'POST', '/auth/login', { identifier: `E2E-${RUN}`, password: newStudent.firstPassword }, 401);
+
+  heading('Excel import');
+  // Its own class, so imported students do not join the Class 8 exams tested later.
+  await expect('create a class for the import', admin, 'POST', '/classes', { academicYearId: year.id, name: 'Class 6', sortOrder: 6 });
+  const importRow = (overrides) => ({
+    admission_no: `E2E-I1-${RUN}`, admission_date: '02/09/2026', admission_type: 'Existing',
+    first_name: 'Asha', family_name: 'Rao', gender: 'F', date_of_birth: '11/06/2013',
+    class: '6', section: 'a', parent_name: 'Lakshmi Rao', parent_mobile: `97${RUN.slice(-8)}`,
+    aadhaar_or_enrolment_no: testAadhaar(), nfc_card_id: `NFC-I1-${RUN}`, ...overrides,
+  });
+  const goodRow = importRow({});
+  const sheet = [
+    goodRow,
+    importRow({ admission_no: `E2E-I2-${RUN}`, parent_mobile: '12345', nfc_card_id: `NFC-I2-${RUN}`, aadhaar_or_enrolment_no: testAadhaar() }),
+    importRow({ nfc_card_id: `NFC-I3-${RUN}`, aadhaar_or_enrolment_no: testAadhaar() }),
+    importRow({ admission_no: `E2E-${RUN}`, nfc_card_id: `NFC-E2E-${RUN}` }),
+  ];
+  await expect('teacher cannot import students', teacher, 'POST', '/students/import', { dryRun: true, rows: sheet }, 403);
+  const dry = (await expect('dry run checks every row', admin, 'POST', '/students/import', { dryRun: true, rows: sheet }, 201)).data;
+  check('dry run saves nothing and lists the problem rows', dry?.imported === 0 && dry?.readyToImport === 1 && dry?.problems?.length === 2, dry);
+  check('problems name the row and the reason', dry?.problems?.some((p) => p.row === 3 && p.errors.some((e) => e.includes('mobile'))) && dry?.problems?.some((p) => p.row === 4 && p.errors.some((e) => e.includes('twice'))), dry?.problems);
+  check('an already registered admission number is skipped, not a problem', dry?.alreadyRegistered?.some((r) => r.row === 5), dry?.alreadyRegistered);
+  const blocked = (await expect('a real run with problems saves nothing', admin, 'POST', '/students/import', { dryRun: false, rows: sheet }, 201)).data;
+  check('nothing imported while any row has a problem', blocked?.imported === 0 && blocked?.problems?.length === 2, blocked);
+  const imported = (await expect('import the clean sheet', admin, 'POST', '/students/import', { dryRun: false, rows: [goodRow, sheet[3]] }, 201)).data;
+  check('one student imported with a login, one skipped', imported?.imported === 1 && imported?.logins?.[0]?.firstPassword === `Rao@${goodRow.parent_mobile.slice(-4)}` && imported?.alreadyRegistered?.length === 1, imported);
+  check('imported student is in 6-A', imported?.logins?.[0]?.section === 'Class 6-A', imported?.logins);
+  const rerun = (await expect('running the same sheet again', admin, 'POST', '/students/import', { dryRun: false, rows: [goodRow] }, 201)).data;
+  check('re-running skips students already imported', rerun?.imported === 0 && rerun?.alreadyRegistered?.length === 1 && rerun?.problems?.length === 0, rerun);
+
+  heading('Students, enrollment, guardians (continued)');
   const visible = (await call(teacher, 'GET', '/students?search=TEST-STUDENT-001')).data;
   check('teacher sees students in assigned classes', visible.some((s) => s.id === studentId), visible?.map((s) => s.firstName));
   await expect('student cannot see another student', student, 'GET', `/students/${newStudent.id}`, undefined, 403);
@@ -231,13 +314,6 @@ async function main() {
   await expect('School Admin cannot lower a Tier 4 change through the general route', admin, 'POST', '/approval-requests', {
     type: 'student.identity-change', entityType: 'student', entityId: studentId, reason: 'Lower tier', payload: { changes: { firstName: 'Changed' } }, tier: 3,
   }, 400);
-  const teacherStudent = (await expect('teacher can still register a student', teacher, 'POST', '/students', {
-    admissionNo: `E2E-T-${RUN}`, nfcId: `nfc-e2e-t-${RUN}`, password: `Stud#${RUN}`, firstName: 'Asha', lastName: 'Rao', dateOfBirth: '2013-06-11',
-  }, [201])).data;
-  check('card ID typed in lowercase is saved in uppercase', teacherStudent?.nfcId === `NFC-E2E-T-${RUN}`, teacherStudent?.nfcId);
-  await expect('same card in a different case is a duplicate', admin, 'POST', '/students', {
-    admissionNo: `E2E-D-${RUN}`, nfcId: `NFC-E2E-T-${RUN}`, password: `Stud#${RUN}`, firstName: 'Dup', lastName: 'Card', dateOfBirth: '2013-06-11',
-  }, 409);
   await expect('admin transfers the student (8-B to 8-A)', admin, 'POST', `/enrollments/${enrollment2.id}/transfer`, { sectionId: secA.id, reason: 'Parent request' }, [201]);
   const moved = (await call(admin, 'GET', `/enrollments/${enrollment2.id}`)).data;
   check('enrollment moved to section A', moved?.sectionId === secA.id, moved);

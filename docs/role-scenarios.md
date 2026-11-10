@@ -3,7 +3,7 @@
 What each role can do in the backend as of 2026-11-10 (`/api/v1`), based on the
 seeded permissions in `backend/prisma/seed.ts` and the service code. Every
 scenario marked **Works** is exercised by the end-to-end suite
-(`npm run test:e2e`, 480 checks passing).
+(`npm run test:e2e`, 517 checks passing).
 
 This page describes the API as built. The agreed plan, including changes not built yet
 (no parent login, admission-number login for students, salary, TC, promotion), is in
@@ -51,7 +51,7 @@ flowchart TD
   L -- yes --> X0[429 locked for 15 minutes]
   L -- no --> B{Contains @ ?}
   B -- yes --> E1[Use as email]
-  B -- no --> D{Student ID or<br/>staff profile ID?}
+  B -- no --> D{Admission number,<br/>student or staff ID?}
   D -- no --> X[401]
   D -- yes --> E2[Resolve the login email]
   E1 --> S[Supabase sign-in]
@@ -62,7 +62,8 @@ flowchart TD
 
 | Scenario | Status |
 |---|---|
-| Login by email, student ID, or staff ID | Works |
+| Login by email, admission number, or (older accounts) student or staff ID | Works |
+| Generated first password must be changed before any other route works | Works |
 | Lockout after repeated failures | Works |
 | Logout and per-session revoke (token refused afterwards) | Works |
 | Change password (current password required) | Works |
@@ -114,7 +115,7 @@ every permission since 2026-11-10; the service rules shown in its column still a
 | Staff and assignments | R M | R M | R | R* | | | |
 | Classes, sections, subjects | R M | R M | R | R | | | |
 | Academic years | R M | R M | R | | | | |
-| Students | R M | R M | R | R + register* | R | R* | R* |
+| Students | R M; register | R M; register | R | R* | R | R* | R* |
 | Guardians | R M | R M | R | R* | R | R* | R* |
 | Enrollments | R M | R M | R + transfer | R* | | R* | R* |
 | Attendance | R M | R M | R | R; M as class teacher* | | R* | R* |
@@ -189,7 +190,7 @@ flowchart TD
 | Staff with login in one call; activate/deactivate (signs them out) | Works |
 | One teacher per section subject; one class teacher per section (replacing the old one) | Works |
 | Removing an assignment or switching a subject off removes the teacher's access at once | Works |
-| Students: register, edit, assign NFC cards, archive/restore, history, documents | Works |
+| Students: register (form or Excel import with dry run; admission-number login; first password changed at first login; Aadhaar encrypted and masked), edit, assign NFC cards, archive/restore, history, documents | Works |
 | Guardians with parent logins; link and unlink children | Works |
 | Enrollment, promote, withdraw, section transfer | Works |
 | Fee structures (submitted for the Principal), assignment to a class, cash/cheque payments, receipts, discount and refund requests | Works |
@@ -369,7 +370,6 @@ flowchart LR
 
 | Gap | Effect |
 |---|---|
-| Card ID required at registration | A student cannot be registered first and given a card later |
 | Push, SMS, and email not verified | Senders are written, but only the console sender has been tested |
 | Real NFC cards not tested | Scanning is covered with typed card IDs only |
 | No Accountant login in the tests | Accountant limits are set by permissions but not covered end to end |

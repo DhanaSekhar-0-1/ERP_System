@@ -71,7 +71,7 @@ This hierarchy decides who can create whom. It is separate from the data sensiti
 
 **Teachers and student data:** a Teacher can change student attendance for their assigned classes and sections, and marks for their assigned subjects in those classes. A Teacher can view a student's details but cannot edit them or request changes to them, including name, date of birth, contact details, NFC card, and class or section. Those changes belong to the School Admin.
 
-**Implementation status:** built as of 2026-11-10. Only a Super Admin can create or give the Super Admin, School Admin, Principal and Accountant roles, or change the users who hold them. Teachers can still register students in the API today; the plan leaves student registration to the School Admin and Super Admin.
+**Implementation status:** built as of 2026-11-10. Only a Super Admin can create or give the Super Admin, School Admin, Principal and Accountant roles, or change the users who hold them. Since 2026-11-10 only the School Admin and Super Admin register students; teachers cannot.
 
 ---
 
