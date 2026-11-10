@@ -143,6 +143,7 @@ by the School Admin applies at once.
 | Feature | API | Screen |
 |---|---|---|
 | Choose own password after signing in with the first password | Done | Done (web); checked in the mobile web preview |
+| Check in and out at school (location, late time) | Done | Built, unverified (mobile; checked in the web preview) |
 | My classes: own subjects and class-teacher sections | Done | Done (web); Built, unverified (mobile) |
 | Daily attendance, only as class teacher of the section | Done | Done (web); Built, unverified (mobile) |
 | NFC or typed card attendance | Done | Built, unverified (mobile); no real card tried |
@@ -241,17 +242,16 @@ requests and Aadhaar Reveal; fee screens in MVP3.
 
 ## Features not built for any role
 
-1. Staff attendance: teacher check-in on the phone (plan: MVP1; NFC later).
-2. Salary, salary proof and bank details (plan: MVP2); salary payments (plan: MVP3).
-3. Announcement banner with images, types and end dates (plan: MVP2).
-4. Year-end promotion with Principal review of failed students, and the leaving and TC flow
+1. Salary, salary proof and bank details (plan: MVP2); salary payments (plan: MVP3).
+2. Announcement banner with images, types and end dates (plan: MVP2).
+3. Year-end promotion with Principal review of failed students, and the leaving and TC flow
    (plan: MVP2).
-5. Sports and events.
-6. Lesson planning and syllabus tracking.
-7. Medical records and consent (DPDP Act).
-8. GPS bus tracking.
-9. WhatsApp Business notifications.
-10. OCR mark entry and biometric attendance (later phase).
+4. Sports and events.
+5. Lesson planning and syllabus tracking.
+6. Medical records and consent (DPDP Act).
+7. GPS bus tracking.
+8. WhatsApp Business notifications.
+9. OCR mark entry and biometric attendance (later phase).
 
 ## Built but not verified
 

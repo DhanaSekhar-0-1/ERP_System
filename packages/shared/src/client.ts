@@ -31,8 +31,14 @@ import type {
   SchoolClass,
   Section,
   SectionSubject,
+  DeviceLocation,
   Gender,
   RegisteredTeacher,
+  StaffAttendanceDay,
+  StaffAttendanceRecord,
+  StaffAttendanceSettings,
+  StaffAttendanceStatus,
+  StaffAttendanceToday,
   Staff,
   StaffAssignment,
   SectionStudent,
@@ -282,6 +288,18 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
       nfcId?: string;
     }) => call<RegisteredTeacher>('POST', '/staff', input),
     teachingSubjects: () => call<string[]>('GET', '/staff/teaching-subjects'),
+
+    myAttendanceToday: () => call<StaffAttendanceToday>('GET', '/staff-attendance/me/today'),
+    checkIn: (location: DeviceLocation) => call<StaffAttendanceRecord>('POST', '/staff-attendance/check-in', location),
+    checkOut: (location: DeviceLocation) => call<StaffAttendanceRecord>('POST', '/staff-attendance/check-out', location),
+    staffAttendanceDay: (date?: string) => call<StaffAttendanceDay>('GET', `/staff-attendance${query({ date })}`),
+    correctStaffAttendance: (
+      staffId: string,
+      input: { date: string; status: StaffAttendanceStatus; checkInTime?: string; checkOutTime?: string; reason: string },
+    ) => call<StaffAttendanceRecord>('PUT', `/staff-attendance/${staffId}`, input),
+    staffAttendanceSettings: () => call<StaffAttendanceSettings>('GET', '/staff-attendance/settings'),
+    saveStaffAttendanceSettings: (input: Partial<Pick<StaffAttendanceSettings, 'latitude' | 'longitude' | 'radiusMeters' | 'lateAfter'>>) =>
+      call<StaffAttendanceSettings>('PUT', '/staff-attendance/settings', input),
     staffAssignments: (academicYearId: string) =>
       call<StaffAssignment[]>('GET', `/staff-assignments${query({ academicYearId })}`),
     assignTeacher: (

@@ -27,6 +27,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { ExaminationsModule } from './modules/examinations/examinations.module';
 import { FeesModule } from './modules/fees/fees.module';
 import { LeavesModule } from './modules/leaves/leaves.module';
+import { StaffAttendanceModule } from './modules/staff-attendance/staff-attendance.module';
 import { TimetablesModule } from './modules/timetables/timetables.module';
 import { ComplaintsModule } from './modules/complaints/complaints.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -70,6 +71,7 @@ import { SyncModule } from './modules/sync/sync.module';
     ExaminationsModule,
     FeesModule,
     LeavesModule,
+    StaffAttendanceModule,
     TimetablesModule,
     ComplaintsModule,
     NotificationsModule,

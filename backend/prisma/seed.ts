@@ -63,6 +63,8 @@ const roleDefinitions = [
     name: 'School Admin',
     description: 'Full operational administrator for an assigned school',
     permissions: [
+      'staff-attendance:read',
+      'staff-attendance:manage',
       ...MEMBER,
       'schools:read',
       'schools:manage',
@@ -138,6 +140,7 @@ const roleDefinitions = [
     name: 'Principal',
     description: 'Academic and administrative oversight, approvals, and releases',
     permissions: [
+      'staff-attendance:read',
       ...MEMBER,
       'schools:read',
       'users:read',
@@ -189,6 +192,7 @@ const roleDefinitions = [
     name: 'Teacher',
     description: 'Teacher access is restricted to assigned classes, sections, and subjects',
     permissions: [
+      'staff-attendance:check-in',
       ...MEMBER,
       'students:read',
       'students:manage',

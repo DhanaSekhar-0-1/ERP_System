@@ -389,3 +389,66 @@ export interface Paged<T> {
   total: number;
   totalPages: number;
 }
+
+export type StaffAttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'ON_LEAVE';
+
+/** One teacher's day; times are school-local HH:MM. */
+export interface StaffAttendanceRecord {
+  id: string;
+  date: string;
+  status: StaffAttendanceStatus;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  minutesAtSchool: number | null;
+  checkInDistanceM: number | null;
+  checkOutDistanceM: number | null;
+  corrected: boolean;
+  correctionReason: string | null;
+}
+
+/** What the teacher's phone shows for today. */
+export interface StaffAttendanceToday {
+  date: string;
+  record: StaffAttendanceRecord | null;
+  onLeave: boolean;
+  lateAfter: string;
+  radiusMeters: number;
+  locationReady: boolean;
+}
+
+export interface StaffAttendanceSettings {
+  timeZone: string;
+  latitude: number | null;
+  longitude: number | null;
+  radiusMeters: number;
+  lateAfter: string;
+  locationReady: boolean;
+}
+
+/** One row of the school's teacher attendance for a day. */
+export interface StaffAttendanceRow {
+  staffId: string;
+  teacherId: string;
+  name: string;
+  phone: string | null;
+  subjects: string[];
+  status: StaffAttendanceStatus | 'NOT_CHECKED_IN';
+  record: StaffAttendanceRecord | null;
+  leaveType: string | null;
+}
+
+export interface StaffAttendanceDay {
+  date: string;
+  isToday: boolean;
+  lateAfter: string;
+  summary: { total: number; present: number; late: number; onLeave: number; absent: number; notCheckedIn: number };
+  teachers: StaffAttendanceRow[];
+}
+
+/** Where the device says it is; only the distance from school is stored. */
+export interface DeviceLocation {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+}
+

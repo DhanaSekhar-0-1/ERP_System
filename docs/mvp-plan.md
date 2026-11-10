@@ -194,6 +194,14 @@ Teachers check in and check out on the phone app. NFC check-in can come later.
   latitude and longitude), radius, and the late time.
 - **Privacy:** only the distance from school and whether it was inside the radius are kept, not
   the raw location.
+- **Built (2026-11-10):** table `staff_attendance` (migration `20261110130000_staff_attendance`);
+  routes under `/staff-attendance`: `me/today`, `check-in`, `check-out` (teachers),
+  `GET /` for a day's list with a summary (School Admin, Principal, Super Admin), `PUT /:staffId`
+  for corrections and `GET`/`PUT settings` (School Admin, Super Admin); permissions
+  `staff-attendance:check-in`, `:read`, `:manage`. Phone: "My attendance today" card on the
+  teacher home (expo-location). Web: "Teacher check-in" card on Settings. The correction screen
+  is part of the dashboard (6b). Days are counted in the school's time zone from school settings
+  (Asia/Kolkata when unset).
 
 ### Admin attendance dashboard (MVP1)
 
@@ -255,8 +263,8 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 4 | Student creation: admission-number login, first password, forced change, import endpoint with a dry run | Done 2026-11-10 |
 | 5 | Teacher registration: app-made ID, subjects | Done 2026-11-10 |
 | 5a | "Choose a new password" screen in the web and phone apps (the server already blocks other routes until the first password changes) | Done 2026-11-10 |
-| 6a | Teacher check-in and check-out (location, late time, Admin corrections, settings) | Next |
-| 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | |
+| 6a | Teacher check-in and check-out (location, late time, Admin corrections, settings) | Done 2026-11-10 |
+| 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | Next |
 | 7 | Leave screens on web and phone | |
 | 8 | Hide parent login and unused modules; host; Android build; device test | |
 

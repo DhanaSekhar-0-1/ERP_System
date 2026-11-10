@@ -18,7 +18,7 @@ Related documents:
 Web (apps/web, React + Vite) and Mobile (apps/mobile, React Native + Expo)
   -> NestJS 11 REST API (backend/src, prefix /api/v1, ~350 routes)
   -> Prisma 6 (DatabaseService extends PrismaClient)
-  -> Supabase PostgreSQL (14 migrations, 71 tables)
+  -> Supabase PostgreSQL (15 migrations, 72 tables)
   -> Supabase Auth (identity) + Supabase Storage (private files, bucket erp-files)
 ```
 
@@ -40,9 +40,9 @@ Shared services in `src/common`:
 
 | Area | Status |
 |---|---|
-| Prisma schema and migrations | Current (14 migrations) |
+| Prisma schema and migrations | Current (15 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 555/555 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 589/589 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
@@ -101,6 +101,14 @@ then hiding the parent login and unused modules, hosting, and a device test. Alo
 2. A separate client database and hosting for the one-month pilot.
 3. Try real cards on an NFC phone.
 4. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+
+Done 2026-11-10: teacher check-in and check-out (step 6a). Teachers check in and out on the
+phone only within the school's radius (default 200 m; readings rougher than 150 m refused),
+Late after the school's set time, once a day each, never on approved leave. School Admin or
+Super Admin corrects a day with a reason; the day's list shows Present, Late, On leave, Absent
+or Not checked in with a summary. Settings card on the web Settings page. Checked in the
+browser: settings saved and read back; phone card before and after check-in (Late, In at 21:22,
+Check out); a refused location shows a clear message.
 
 Done 2026-11-10: "Choose your own password" screen in the web and phone apps (step 5a). After a
 sign-in with a first password the app shows only this screen until the password is changed,

@@ -360,6 +360,58 @@ async function main() {
   const raviLogin = await call(null, 'POST', '/auth/login', { identifier: `ravi.${RUN}@school.example`, password: raviT.firstPassword });
   check('a teacher with an email can also sign in with it', raviLogin.status === 201, raviLogin.status);
 
+  heading('Teacher check-in and check-out');
+  // A fixed school location; points are placed by metres north of it.
+  const SCHOOL = { latitude: 16.2385, longitude: 80.6472 };
+  const near = (metres, accuracy = 20) => ({ latitude: SCHOOL.latitude + metres / 111320, longitude: SCHOOL.longitude, accuracy });
+  await expect('a teacher cannot change check-in settings', teacher, 'PUT', '/staff-attendance/settings', { ...SCHOOL, radiusMeters: 200, lateAfter: '23:59' }, 403);
+  const attendanceRules = (await expect('School Admin sets the school location, radius and late time', admin, 'PUT', '/staff-attendance/settings', { ...SCHOOL, radiusMeters: 200, lateAfter: '23:59' })).data;
+  check('settings saved, location ready', attendanceRules?.locationReady === true && attendanceRules?.radiusMeters === 200 && attendanceRules?.lateAfter === '23:59', attendanceRules);
+  await expect('only a latitude without a longitude is refused', admin, 'PUT', '/staff-attendance/settings', { latitude: 16 }, 400);
+  const lakshmiToken = lakshmiAgain.data?.session?.access_token;
+  const lakshmiToday = (await expect('teacher opens today', lakshmiToken, 'GET', '/staff-attendance/me/today')).data;
+  check('no record yet, rules shown', lakshmiToday?.record === null && lakshmiToday?.locationReady === true && lakshmiToday?.lateAfter === '23:59', lakshmiToday);
+  const far = await call(lakshmiToken, 'POST', '/staff-attendance/check-in', near(1000));
+  check('check-in 1 km away is refused with the distance', far.status === 403 && /(99\d|100\d) m from school/.test(far.error?.message ?? ''), far.error?.message);
+  await expect('a rough location reading is refused', lakshmiToken, 'POST', '/staff-attendance/check-in', near(10, 500), 400);
+  await expect('cannot check out before checking in', lakshmiToken, 'POST', '/staff-attendance/check-out', near(10), 409);
+  const checkedIn = (await expect('teacher checks in 50 m from school', lakshmiToken, 'POST', '/staff-attendance/check-in', near(50), 201)).data;
+  check('on time, distance kept, time recorded', checkedIn?.status === 'PRESENT' && checkedIn?.checkInDistanceM === 50 && /^\d{2}:\d{2}$/.test(checkedIn?.checkInTime ?? ''), checkedIn);
+  await expect('cannot check in twice', lakshmiToken, 'POST', '/staff-attendance/check-in', near(50), 409);
+  const checkedOut = (await expect('teacher checks out', lakshmiToken, 'POST', '/staff-attendance/check-out', near(30), 201)).data;
+  check('check-out time recorded', checkedOut?.checkOutTime && checkedOut?.minutesAtSchool >= 0, checkedOut);
+  await expect('cannot check out twice', lakshmiToken, 'POST', '/staff-attendance/check-out', near(30), 409);
+
+  // Late rule: a check-in after the late time is Late.
+  await expect('School Admin moves the late time to midnight', admin, 'PUT', '/staff-attendance/settings', { lateAfter: '00:00' });
+  const raviFirst = (await call(null, 'POST', '/auth/login', { identifier: raviT.teacherId, password: raviT.firstPassword })).data?.session?.access_token;
+  await expect('second teacher sets a password', raviFirst, 'POST', '/auth/change-password', { currentPassword: raviT.firstPassword, newPassword: `RaviT#${RUN}` });
+  const raviToken = (await call(null, 'POST', '/auth/login', { identifier: raviT.teacherId, password: `RaviT#${RUN}` })).data?.session?.access_token;
+  const lateIn = (await expect('second teacher checks in after the late time', raviToken, 'POST', '/staff-attendance/check-in', near(5), 201)).data;
+  check('recorded as Late', lateIn?.status === 'LATE', lateIn);
+  await expect('School Admin puts the late time back to 09:15', admin, 'PUT', '/staff-attendance/settings', { lateAfter: '09:15' });
+
+  // The school's view and corrections.
+  await expect('a teacher cannot see everyone', teacher, 'GET', '/staff-attendance', undefined, 403);
+  const todayView = (await expect('School Admin sees teachers today', admin, 'GET', '/staff-attendance')).data;
+  const rowOf = (view, staffId) => view?.teachers?.find((t) => t.staffId === staffId);
+  check('checked-in teacher shows Present with times', rowOf(todayView, lakshmi.id)?.status === 'PRESENT' && rowOf(todayView, lakshmi.id)?.record?.checkOutTime, rowOf(todayView, lakshmi.id));
+  check('late teacher shows Late', rowOf(todayView, raviT.id)?.status === 'LATE');
+  check('summary counts the day', todayView?.isToday === true && todayView?.summary?.total >= 2 && todayView?.summary?.present >= 1 && todayView?.summary?.late >= 1, todayView?.summary);
+  await expect('Principal can see teachers today', principal, 'GET', '/staff-attendance');
+  const testTeacherStaff = (await call(admin, 'GET', '/staff')).data?.find((x) => x.user.email === creds.teacher.email);
+  const yesterday = day(-1);
+  await expect('a correction needs a reason', admin, 'PUT', `/staff-attendance/${testTeacherStaff?.id}`, { date: yesterday, status: 'PRESENT', reason: '' }, 400);
+  await expect('check-out cannot be before check-in', admin, 'PUT', `/staff-attendance/${testTeacherStaff?.id}`, { date: yesterday, status: 'PRESENT', checkInTime: '10:00', checkOutTime: '09:00', reason: 'Forgot phone' }, 400);
+  await expect('no attendance for a future day', admin, 'PUT', `/staff-attendance/${testTeacherStaff?.id}`, { date: day(2), status: 'PRESENT', reason: 'Too early' }, 400);
+  await expect('Principal cannot correct', principal, 'PUT', `/staff-attendance/${testTeacherStaff?.id}`, { date: yesterday, status: 'PRESENT', reason: 'Not allowed' }, 403);
+  const teacherFix = (await expect('School Admin marks a teacher present for yesterday', admin, 'PUT', `/staff-attendance/${testTeacherStaff?.id}`, {
+    date: yesterday, status: 'PRESENT', checkInTime: '08:55', checkOutTime: '16:30', reason: 'Forgot phone at home',
+  })).data;
+  check('correction saved with times and reason', teacherFix?.status === 'PRESENT' && teacherFix?.checkInTime === '08:55' && teacherFix?.checkOutTime === '16:30' && teacherFix?.corrected === true && teacherFix?.minutesAtSchool === 455, teacherFix);
+  const yesterdayView = (await expect('School Admin opens yesterday', admin, 'GET', `/staff-attendance?date=${yesterday}`)).data;
+  check('corrected day shows; teachers with no record show Absent for a past day', rowOf(yesterdayView, testTeacherStaff?.id)?.status === 'PRESENT' && rowOf(yesterdayView, lakshmi.id)?.status === 'ABSENT', [rowOf(yesterdayView, testTeacherStaff?.id)?.status, rowOf(yesterdayView, lakshmi.id)?.status]);
+
   heading('Students, enrollment, guardians (continued)');
   const visible = (await call(teacher, 'GET', '/students?search=TEST-STUDENT-001')).data;
   check('teacher sees students in assigned classes', visible.some((s) => s.id === studentId), visible?.map((s) => s.firstName));

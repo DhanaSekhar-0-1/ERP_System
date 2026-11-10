@@ -32,7 +32,8 @@
       "expo-secure-store",
       "./plugins/with-short-native-paths",
       ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }],
-      ["react-native-nfc-manager", { "nfcPermission": "Reads student ID cards to mark attendance" }]
+      ["react-native-nfc-manager", { "nfcPermission": "Reads student ID cards to mark attendance" }],
+      ["expo-location", { "locationWhenInUsePermission": "Checks that you are at school when you check in or out. Only the distance from school is saved." }]
     ]
   }
 }
