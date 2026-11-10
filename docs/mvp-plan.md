@@ -171,9 +171,41 @@ Any step can send it back with a reason; the family can cancel while it is pendi
   sends a notification to its audience.
 - Only Super Admin, Principal and Admin post emergencies, which stay pinned in red.
 
-### Teacher attendance (MVP1)
+### Teacher attendance (MVP1, decided 2026-11-10)
 
-Teachers check in on the phone app for the pilot. NFC check-in can come later.
+Teachers check in and check out on the phone app. NFC check-in can come later.
+
+- **At school only:** check-in and check-out work only when the phone's location is within the
+  school's radius (default 200 m) of the school location saved in settings. A reading less
+  accurate than 150 m is refused ("move outside or try again"). Until the school location is
+  saved, check-in is refused with a message telling the Admin to set it. A phone with a fake
+  location app can still cheat; the Admin dashboard and corrections are the check on that.
+- **Late:** the school sets a "late after" time (default 9:15 am, school time zone). A check-in
+  after it is recorded as Late.
+- **Check-out:** once per day, after checking in. Hours at school are shown to the Admin.
+- **One record per teacher per day.** A teacher on approved leave shows as On leave and
+  cannot check in that day.
+- **Corrections:** the School Admin or Super Admin can mark or change a teacher's day (Present,
+  Late, Absent, On leave) with a reason, for example a forgotten phone. Every correction is
+  audited and shows "corrected by" on the record.
+- **Not checked in** by the end of the day counts as Absent on the dashboard; nothing is written
+  for those days unless the Admin corrects it.
+- **Settings** (Admin, web Settings page): school location (use this device's location or type
+  latitude and longitude), radius, and the late time.
+- **Privacy:** only the distance from school and whether it was inside the radius are kept, not
+  the raw location.
+
+### Admin attendance dashboard (MVP1)
+
+One web page for the School Admin, Principal and Super Admin:
+
+- **Today:** student attendance by class and section (present, absent, on leave, not marked
+  yet), with a class and section filter.
+- **Teachers today:** checked in, late, on leave, not checked in, with check-in and check-out
+  times; the Admin can correct any row from here.
+- **Overall %:** each student's attendance for the academic year so far, counted from the
+  admission date for students who joined mid-year.
+- **Student details page:** click a student to see their details and monthly attendance.
 
 ---
 
@@ -188,7 +220,7 @@ Attendance, registering people, and leave.
 3. Student registration, one by one or from Excel, with admission-number login.
 4. Classes, sections and teacher assignments (built).
 5. Student attendance by the class teacher on web, phone or NFC (built).
-6. Teacher check-in on the phone.
+6. Teacher check-in and check-out on the phone, only at school (location), with a late time.
 7. Admin dashboard: today's attendance by class and section, overall %, teachers present, a
    student details page.
 8. Leave: student to class teacher (built); teacher to Principal only (built 2026-11-10).
@@ -223,7 +255,8 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 4 | Student creation: admission-number login, first password, forced change, import endpoint with a dry run | Done 2026-11-10 |
 | 5 | Teacher registration: app-made ID, subjects | Done 2026-11-10 |
 | 5a | "Choose a new password" screen in the web and phone apps (the server already blocks other routes until the first password changes) | Done 2026-11-10 |
-| 6 | Teacher check-in and the Admin attendance dashboard | Next |
+| 6a | Teacher check-in and check-out (location, late time, Admin corrections, settings) | Next |
+| 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | |
 | 7 | Leave screens on web and phone | |
 | 8 | Hide parent login and unused modules; host; Android build; device test | |
 
