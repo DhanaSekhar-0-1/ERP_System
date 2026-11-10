@@ -1,9 +1,13 @@
 # School ERP — Role Scenarios and Permissions
 
-What each role can do in the backend as of 2026-11-09 (`/api/v1`), based on the
+What each role can do in the backend as of 2026-11-10 (`/api/v1`), based on the
 seeded permissions in `backend/prisma/seed.ts` and the service code. Every
 scenario marked **Works** is exercised by the end-to-end suite
-(`npm run test:e2e`, 460 checks passing).
+(`npm run test:e2e`, 476 checks passing).
+
+This page describes the API as built. The agreed plan, including changes not built yet
+(no parent login, admission-number login for students, salary, TC, promotion), is in
+[mvp-plan.md](./mvp-plan.md).
 
 This document covers the API only. For which features have a screen, and what is
 still to do for each role, see [feature-status-by-role.md](./feature-status-by-role.md).
@@ -72,7 +76,7 @@ flowchart TD
   A[User makes a change] --> T{Sensitivity tier}
   T -- Tier 1 --> T1[Applied now, audited<br/>e.g. parent edits child phone]
   T -- Tier 2 --> T2[Applied with a reason, audited<br/>e.g. attendance fix within 48 hours]
-  T -- Tier 3 --> T3[Approval request] --> L3{School Admin or<br/>Principal approves?}
+  T -- Tier 3 --> T3[Approval request] --> L3{School Admin or<br/>Principal approves?<br/>Discounts: Principal only}
   T -- Tier 4 --> D4{Supporting document<br/>attached?}
   D4 -- no --> X[400]
   D4 -- yes --> T4[Approval request] --> A4[School Admin approves<br/>raising it counts] --> P4{Principal approves?}
@@ -86,15 +90,19 @@ flowchart TD
 |---|---|
 | Parent contact details, own profile | 1 |
 | Attendance edit within 48 hours (reason required) | 2 |
-| Attendance older than 48 hours, marks after submission and before release, section transfer, fee structure, discount, refund, bonafide/study certificate | 3 |
+| Attendance older than 48 hours, marks after submission and before release, section transfer, fee structure, refund, bonafide/study certificate | 3 |
+| Fee discount: only the Principal approves, never their own request | 3 |
 | Student name, date of birth, admission number; marks after release; re-opening released results; transfer certificate | 4 |
 
 A section transfer is raised by a School Admin or Principal and applies straight away.
-Teachers raise only attendance and mark corrections.
+Teachers raise only attendance and mark corrections. A fee discount is always a request:
+nothing changes until the Principal approves it. Super Admin fills the School Admin's slot
+on Tier 4 requests, never the Principal's.
 
 ## 4. Permission matrix (seeded)
 
-R = read, M = manage, * = limited to own / linked / assigned records.
+R = read, M = manage, * = limited to own / linked / assigned records. Super Admin holds
+every permission since 2026-11-10; the service rules shown in its column still apply.
 
 | Area | Super Admin | School Admin | Principal | Teacher | Accountant | Parent | Student |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -103,27 +111,27 @@ R = read, M = manage, * = limited to own / linked / assigned records.
 | Users, roles, overrides | R M | R M | | | | | |
 | Staff and assignments | R M | R M | R | R* | | | |
 | Classes, sections, subjects | R M | R M | R | R | | | |
-| Academic years | R | R M | R | | | | |
-| Students | R | R M | R | R + register* | R | R* | R* |
-| Guardians | | R M | R | R* | R | R* | R* |
-| Enrollments | R | R M | R + transfer | R* | | R* | R* |
-| Attendance | R | R M | R | R; M as class teacher* | | R* | R* |
+| Academic years | R M | R M | R | | | | |
+| Students | R M | R M | R | R + register* | R | R* | R* |
+| Guardians | R M | R M | R | R* | R | R* | R* |
+| Enrollments | R M | R M | R + transfer | R* | | R* | R* |
+| Attendance | R M | R M | R | R; M as class teacher* | | R* | R* |
 | Homework | R M | R M | R M | R M* | | R* | R* + submit |
 | Announcements | R M | R M | R M | R (audience) | R | R (audience) | R (audience) |
 | Examinations and marks | M, approve and release sections | M, approve sections | M, release sections | marks M*, slip tests | | released R* | released R* |
-| Fees and payments | | R M | R | | R M | R* + pay | R* + pay |
-| Student leave | | decide | decide | decide (class teacher) | | request | request |
-| Staff leave | | decide | decide | request | request | | |
-| Timetable and substitutes | | R M | R M | R (published) | | R (published) | R (published) |
-| Complaints | | manage | manage | | | submit / track | submit / track |
-| Certificates | | R M | R | | | issued R* | issued R* |
-| Approvals | R M | R M | R M | attendance and mark corrections | request | | |
-| Audit and security logs | R | R | R | | | | |
-| Reports and analytics | R | R | R | | fee reports | | |
-| Transport | | R M | R | | | R* | R* |
-| Library | | R M | R | R | | R* | R* |
-| Assets | | R M | R | | | | |
-| Offline sync | | manage | manage | write | | | |
+| Fees and payments | R M; discounts: request only | R M; discounts: request only | R; approves discounts | | R M | R* + pay | R* + pay |
+| Student leave | decide | decide | decide | decide (class teacher) | | request | request |
+| Staff leave | view | view | decide (only role) | request | request | | |
+| Timetable and substitutes | R M | R M | R M | R (published) | | R (published) | R (published) |
+| Complaints | R M | manage | manage | | | submit / track | submit / track |
+| Certificates | R M | R M | R | | | issued R* | issued R* |
+| Approvals | R M; not discounts or the Principal's slot | R M; not discounts | R M | attendance and mark corrections | request | | |
+| Audit and security logs | R M | R | R | | | | |
+| Reports and analytics | R M | R | R | | fee reports | | |
+| Transport | R M | R M | R | | | R* | R* |
+| Library | R M | R M | R | R | | R* | R* |
+| Assets | R M | R M | R | | | | |
+| Offline sync | R M | manage | manage | write | | | |
 
 Extra roles: **Librarian** (library manage), **Transport Staff** (transport manage),
 **Reception** (guardians and certificates manage, approval requests). Every role can
@@ -134,9 +142,9 @@ Staff, parents, and leaders also have dashboards; students do not.
 
 ## 5. Admin view
 
-The intended account hierarchy is in the
-[architecture doc](../school-erp-architecture.md) (section 2.4). Today a School Admin
-creates accounts, and a Principal cannot.
+The account hierarchy is in the [architecture doc](../school-erp-architecture.md)
+(section 2.4): only a Super Admin creates Principal, School Admin and Accountant accounts;
+a School Admin creates teachers and students; a Principal creates nobody.
 
 ### 5.1 Super Admin — organization and school setup
 
@@ -149,7 +157,9 @@ creates accounts, and a Principal cannot.
 | In its own school: register teachers, subject and class teachers | Works |
 | In its own school: classes, sections, per-section subjects, default subjects | Works |
 | In its own school: create exams; approve and release sections (both steps) | Works |
-| Academic years, students, fees, timetables, leave | Not allowed (no permission) |
+| Every other module: academic years, students, fees, timetables, leave and more (full access) | Works |
+| Creates and changes Principal, School Admin and Accountant accounts (only role that can) | Works |
+| Cannot approve fee discounts, decide staff leave, or give the Principal's Tier 4 approval | Works |
 
 ### 5.2 School Admin — set up and run the year
 
@@ -180,7 +190,9 @@ flowchart TD
 | Students: register, edit, assign NFC cards, archive/restore, history, documents | Works |
 | Guardians with parent logins; link and unlink children | Works |
 | Enrollment, promote, withdraw, section transfer | Works |
-| Fee structures, assignment to a class, cash/cheque payments, receipts, discounts, refunds | Works |
+| Fee structures, assignment to a class, cash/cheque payments, receipts, discount requests, refunds | Works |
+| Cannot approve discounts or decide staff leave | Works |
+| Cannot create, change, deactivate or give overrides to Principal, School Admin or Accountant accounts | Works |
 | Exam types FA1-FA4, Q1-Q3, Pre-public (Class 10 only), Other; one exam for several classes | Works |
 | Approve each section's marks when complete, or every ready section at once; send back | Works |
 | Approve and release slip tests | Works |
@@ -202,15 +214,17 @@ flowchart TD
 | Release approved exam sections, one at a time or all at once; cannot give the first approval | Works |
 | Principal approval on Tier 4 requests, including rejection | Works |
 | Principal dashboard, reports, analytics, audit | Works |
-| Decide staff leave; manage timetable and substitutes | Works |
-| Create a School Admin | Not built |
+| Decide staff leave: the only role that can; a rejection needs a reason | Works |
+| Approve fee discounts: the only role that can, never its own request | Works |
+| Manage timetable and substitutes | Works |
+| Create accounts | Not planned: Super Admin creates senior accounts |
 
 ### 5.4 Accountant
 
 | Scenario | Status |
 |---|---|
 | Fee structures (submit for approval), assign, record and verify payments, receipts | Works (as School Admin in tests) |
-| Request discounts and refunds (Tier 3) | Works (as School Admin in tests) |
+| Request discounts (the Principal approves) and refunds | Works (as School Admin in tests) |
 | Overdue list, fee reports, accountant dashboard | Works (as School Admin in tests) |
 | No access to marks, attendance, complaints | Untested (no Accountant login in the tests) |
 
@@ -313,6 +327,9 @@ flowchart TD
 
 ## 8. Parent view
 
+**Plan:** the parent login is removed from the apps in MVP1 and the family uses the student's
+login (see [mvp-plan.md](./mvp-plan.md)). The API below still works and stays, hidden.
+
 ```mermaid
 flowchart TD
   A[School Admin creates guardian<br/>and parent login] --> B[Parent logs in]
@@ -340,7 +357,7 @@ flowchart TD
 flowchart LR
   A[Teacher requests leave] --> B{Balance left?}
   B -- no --> X[400]
-  B -- yes --> C[Principal / Admin approves]
+  B -- yes --> C[Principal approves<br/>reason needed to reject]
   C --> D[Substitute request per timetabled period]
   D --> E["GET available-teachers<br/>free, not on leave, under daily limit,<br/>subject specialists first"]
   E --> F[Assign or auto-assign] --> G[Substitute notified]
@@ -350,8 +367,7 @@ flowchart LR
 
 | Gap | Effect |
 |---|---|
-| Approval tier is set by the caller | A School Admin or Principal can file a Tier 4 change as Tier 3 through `POST /approval-requests` and approve it alone |
-| Account hierarchy not built | A Principal cannot create a School Admin, and a School Admin can assign the Principal role |
+| Approval tier is set by the caller | A School Admin or Principal can file a Tier 4 change as Tier 3 through `POST /approval-requests` and approve it alone. Fee discounts are protected (Principal only, no self-approval) |
 | Card ID required at registration | A student cannot be registered first and given a card later |
 | Push, SMS, and email not verified | Senders are written, but only the console sender has been tested |
 | Real NFC cards not tested | Scanning is covered with typed card IDs only |

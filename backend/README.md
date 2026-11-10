@@ -64,7 +64,19 @@ guard rejects its tokens from then on. Five failed logins for one identifier wit
 
 Seeded roles: Super Admin, School Admin, Principal, Teacher, Accountant, Parent,
 Student, Librarian, Transport Staff, Reception. Rerun `npm run prisma:seed` after
-pulling changes; it only adds.
+pulling changes; it only adds. Super Admin gets every permission any role has.
+
+**Account and approval rules** (see [docs/mvp-plan.md](../docs/mvp-plan.md) for the full plan):
+
+- Only a Super Admin can create, give or change the Super Admin, School Admin, Principal
+  and Accountant roles and the users who hold them (`UsersService`).
+- Only the Principal approves or rejects staff leave; a rejection needs a reason
+  (`LeavesService`).
+- A fee discount is always a request; only the Principal approves it, never their own.
+  Request types can fix their approvers and forbid self-approval through
+  `ApprovalDefinition.approverRoles` and `allowSelfApproval` (`ApprovalEngine`).
+- The Parent role and its routes remain, but the agreed plan removes the parent login from
+  the apps; the family uses the student's login.
 
 **Sensitivity tiers.** Changes follow the architecture document:
 
@@ -72,12 +84,12 @@ pulling changes; it only adds.
 |---|---|---|
 | 1 | Applied immediately, audited | Parent edits child contact details |
 | 2 | Applied with a required reason, audited | Teacher corrects attendance within 48 hours |
-| 3 | Approval request; a School Admin or Principal approves | Older attendance corrections, section transfers, fee structures, discounts, refunds, certificates |
+| 3 | Approval request; a School Admin or Principal approves (discounts: Principal only) | Older attendance corrections, section transfers, fee structures, discounts, refunds, certificates |
 | 4 | Approval request with a supporting document; School Admin and Principal both approve | Student name/DOB/admission number, post-release mark changes, re-opening released results, transfer certificates |
 
 Requests live under `/approval-requests` (`approve`, `reject`, `cancel`, `history`).
-A School Admin raising a Tier 4 request fills the School Admin slot; the Principal
-completes it. The change is applied in the same transaction as the final approval.
+A School Admin (or Super Admin) raising a Tier 4 request fills the School Admin slot; only
+a Principal can complete it. The change is applied in the same transaction as the final approval.
 
 **Audit.** Sensitive mutations append to `audit_logs` (actor, role, old and new
 values, reason, approval id, IP, request id). There are no update or delete routes

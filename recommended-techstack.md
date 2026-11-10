@@ -78,6 +78,10 @@ packages/
 Use Next.js and React for the Admin, Principal, Teacher, Accountant, Parent,
 and other web portals.
 
+> As built, the web app is React + Vite (see [apps/README.md](./apps/README.md)), used by
+> Super Admin, School Admin, Principal and Teacher. The agreed plan
+> ([docs/mvp-plan.md](./docs/mvp-plan.md)) has no parent login.
+
 ### Mobile
 
 Use React Native with Expo for Android and iOS. This is preferable to

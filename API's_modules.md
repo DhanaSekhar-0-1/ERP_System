@@ -39,6 +39,14 @@ Student / Parent / Teacher / Accountant / Principal / Admin
 The backend is authoritative. Frontend permission checks are only for user
 experience; every request must be authorized again by NestJS.
 
+> **Agreed plan (2026-11-10):** [docs/mvp-plan.md](./docs/mvp-plan.md) sets the roles and the
+> MVP1/2/3 order actually being built, and wins where this catalog differs. Planned API
+> changes not yet in this catalog: admission-number student login with a generated first
+> password and forced change, student and teacher registration fields, a student import
+> endpoint with a dry run, app-made teacher IDs, teacher check-in, salary and bank details,
+> announcement types and banners, promotion review, and the leaving and TC flow. Parent routes
+> remain but the parent login is removed from the apps.
+
 ## 2. Development Flow
 
 ```text

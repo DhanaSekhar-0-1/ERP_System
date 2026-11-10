@@ -1,10 +1,11 @@
 # School ERP Project Status
 
 Single source of truth for what is built, what is partial, and what is known
-to be missing. Last updated 2026-11-09.
+to be missing. Last updated 2026-11-10.
 
 Related documents:
 
+- [docs/mvp-plan.md](./docs/mvp-plan.md) - **agreed plan for the first school**: roles, approvals, MVP1/2/3 and the MVP1 build order
 - [school-erp-architecture.md](./school-erp-architecture.md) - product design, RBAC, sensitivity tiers, roadmap
 - [recommended-techstack.md](./recommended-techstack.md) - chosen technology stack
 - [API's_modules.md](./API's_modules.md) - target API catalog and sprint order
@@ -57,8 +58,8 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 | Module | Status | Notes |
 |---|---|---|
 | Authentication and sessions | Done | Login by email/student ID/staff ID, refresh, logout, forgot/reset/change password, OTP, session list and revoke, MFA endpoints, lockout after 5 failures in 15 min |
-| Organizations, schools, settings | Done | Super Admin limited to own organization; archived schools blocked. Super Admin has full access (every permission any role has, applied by `npm run prisma:seed`) and can fill any approval slot, though Tier 4 still needs a second person |
-| Users, roles, permissions | Done | Permission overrides, email sync to Supabase, built-in roles cannot be renamed |
+| Organizations, schools, settings | Done | Super Admin limited to own organization; archived schools blocked. Super Admin has full access (every permission any role has, applied by `npm run prisma:seed`) except that it cannot approve fee discounts, decide staff leave, or give the Principal's Tier 4 approval |
+| Users, roles, permissions | Done | Permission overrides, email sync to Supabase, built-in roles cannot be renamed. Only a Super Admin creates, gives or changes Super Admin, School Admin, Principal and Accountant accounts |
 | Academic years | Done | Activate, close, rollover (copy structure, optional promotion), summary |
 | Classes, sections, subjects | Done | A new class gets Section A; every new section gets its own copy of the school's default subjects (Sanskrit optional and off). Subjects are per section, so renaming or switching one off affects that section only. Delete is refused while students, exams, homework, fees or timetables depend on it; a class keeps at least one section. Web: Classes & Sections with Sections, Subjects, Teacher assignments and Students tabs, and Settings for the default subjects |
 | Staff and assignments | Done | One teacher per section subject and one class teacher per section (own table). A section subject can be assigned only in its own section while switched on. Teacher access is read from current assignments on every request, so removing one revokes it at once. Web: Teacher Assignments page |
@@ -69,8 +70,8 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 | Homework | Done | Section-aware assignment check, grading, return, late flag, archive |
 | Announcements | Done | Audience targeting applied on read; publish notifies the audience |
 | Examinations and marks | Done | Exam types FA1-FA4 (minor), Q1 Quarterly, Q2 Half-yearly, Q3 Annual (major), Pre-public (Class 10 only), slip tests, and Other. Teachers submit marks; each section is approved by the School Admin once its marks are complete and released by the Principal, independently of other sections (bulk approve-ready and release-approved too). Released marks and report cards show to that section's students, parents and teachers at once; the exam is marked released when every section is. Teachers create slip tests for their own sections, and the School Admin's approval releases them. Tier 3/4 corrections, report cards |
-| Fees and payments | Done | Structure approval, discounts and refunds (Tier 3), receipts, gateway orders, signed idempotent webhooks |
-| Leave | Done | Student leave marks ON_LEAVE; staff leave checks balance and opens substitute requests |
+| Fees and payments | Done | Structure approval, refunds (Tier 3), discounts (always a request; only the Principal approves, never their own), receipts, gateway orders, signed idempotent webhooks |
+| Leave | Done | Student leave marks ON_LEAVE; staff leave checks balance, is decided only by the Principal (reason needed to reject), and opens substitute requests |
 | Timetable and substitutes | Done | Rule-based conflict engine, draft generator, available-teacher ranking |
 | Feedback and complaints | Done | Leader-only routing, anonymity, SLA auto-escalation, repeated-complaint alert |
 | Notifications | Done | Inbox, preferences, devices, templates, delivery log; delivery worker with FCM/Twilio/Resend senders, retries with backoff, retry/process admin routes. FCM (push), Twilio (SMS) and Resend (email) are **not verified** against the real services |
@@ -90,11 +91,22 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 
 ## 5. Next steps
 
-1. Change the test passwords that are readable in the repository history.
-2. Fix the approval-tier gap (`POST /approval-requests` takes the tier from the caller) and build the account hierarchy (Principal creates School Admins and Accountants).
-3. School Admin screens for student registration, enrollment and academic years; then homework, fees and timetables.
-4. Test the phone app by hand on real data, try real cards on an NFC phone, and host the backend for the school demo.
+MVP1 is being built on branch `feature/mvp1`, in the order set in
+[docs/mvp-plan.md](./docs/mvp-plan.md#5-mvp1-build-order): database changes for the new teacher
+and student fields, student creation with admission-number login and Excel import, teacher
+registration with app-made IDs, teacher check-in and the attendance dashboard, leave screens,
+then hiding the parent login and unused modules, hosting, and a device test. Alongside it:
+
+1. Fix the approval-tier gap for the remaining request types (`POST /approval-requests` takes the tier from the caller; discounts are already protected).
+2. Change the test passwords that are readable in the repository history.
+3. A separate client database and hosting for the one-month pilot.
+4. Try real cards on an NFC phone.
 5. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+
+Done 2026-11-10: the MVP plan was agreed ([docs/mvp-plan.md](./docs/mvp-plan.md)). Super Admin
+got full access; only a Super Admin creates or changes Principal, School Admin and Accountant
+accounts; only the Principal decides staff leave (a rejection needs a reason) and approves fee
+discounts, which are always requests and never self-approved.
 
 Done 2026-11-09: class, section, subject and teacher assignment management; per-section exam
 approval and release; multi-class exams; teacher web area; local sign-in checks and a short

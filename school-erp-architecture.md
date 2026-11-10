@@ -2,6 +2,12 @@
 
 *Prepared as a consolidated redesign of the original requirements, covering RBAC, controlled-change workflows, modules, security, architecture, and roadmap.*
 
+> **Agreed plan for the first school (2026-11-10):** [docs/mvp-plan.md](./docs/mvp-plan.md)
+> sets the roles, approvals and MVP stages actually being built. Where it differs from this
+> document (no parent login, Super Admin creating senior accounts, Principal-only discounts and
+> staff leave, salary visibility, MVP1/2/3 instead of Phases 1–4), the plan wins. The sections
+> below have been updated where they conflicted.
+
 ---
 
 ## 1. Objective and Design Principles
@@ -22,18 +28,18 @@ The goal is a centralized ERP (web + mobile) that digitizes school operations wh
 
 | Role | Scope |
 |---|---|
-| Super Admin | Cross-school/organization config (for a group running multiple schools); billing, module enablement |
-| School Admin | Full operational control within one school |
-| Principal | Academic/administrative oversight, approvals, overrides, alerts |
+| Super Admin | School owner or management: full access, except teacher salaries, bank details, teacher leave decisions and discount approval. Creates Principal, School Admin and Accountant accounts. Cross-school/organization config for a group running multiple schools |
+| School Admin | Runs the school office: registers teachers and students, watches attendance, approves exam marks per section |
+| Principal | Academic/administrative oversight and final approval: teacher leave, discounts, fee structures, teacher salaries, TC, failed students, exam release |
 | Vice Principal / Headmaster | Delegated subset of Principal powers (configurable) |
 | Class Teacher | Everything a Subject Teacher has, plus full view and limited edit rights over their assigned class (diary, leave approval for that class, homeroom attendance) |
 | Subject Teacher | Access limited to the subjects/classes/sections assigned to them |
-| Accountant / Fee Staff | Fee module only; no access to marks, diary, or complaints |
+| Accountant / Fee Staff | Fees, salary payments and leaving clearances; sees student attendance and needed registration fields; no access to marks, diary, or complaints |
 | Reception / Office Staff | Admissions intake, certificates, front-office communication |
 | Librarian | Library module only |
 | Transport Staff | Routes, buses, student-route allocation, transport attendance |
-| Parent | Their linked child/children only |
-| Student | Their own record only, read-mostly, via parent account, web portal, or (optionally) their own limited login |
+| Parent | **No login in the apps (plan, 2026-11-10).** The family uses the student's login; the parent's name and mobile are stored on the student record for alerts. The parent role remains in the API, hidden, in case a school asks for it |
+| Student | Their own record only, read-mostly. Logs in with the admission number; the same login is used by the family |
 
 ### 2.2 Fixed vs. Configurable Permissions
 
@@ -50,20 +56,22 @@ Every module permission is expressed as a combination of: `View / Create / Edit 
 
 ### 2.4 Who Creates Accounts
 
-Accounts follow a hierarchy within a school. A role can create only the roles listed for it in this table, never one at its own level or above.
+Accounts follow a hierarchy within a school (agreed plan, 2026-11-10). A role can create only the roles listed for it in this table.
 
 | Role | Can create | Access to student records |
 |---|---|---|
-| Principal | School Admin | View all in the school |
-| School Admin | Teacher, Student | Full |
-| Teacher | Student | View students in assigned classes and sections |
-| Student | Nobody | View own record only |
+| Super Admin | Principal, School Admin, Accountant, Teacher, Student | Full (Aadhaar masked) |
+| School Admin | Teacher, Student | Full (Aadhaar masked) |
+| Principal | Nobody | View all in the school |
+| Accountant | Nobody | Registration fields needed for fees, and attendance |
+| Teacher | Nobody | View students in assigned classes and sections |
+| Student | Nobody | View own record only, including own Aadhaar in full |
 
 This hierarchy decides who can create whom. It is separate from the data sensitivity tiers in Section 3, which decide who must approve a change.
 
 **Teachers and student data:** a Teacher can change student attendance for their assigned classes and sections, and marks for their assigned subjects in those classes. A Teacher can view a student's details but cannot edit them or request changes to them, including name, date of birth, contact details, NFC card, and class or section. Those changes belong to the School Admin.
 
-**Implementation status:** School Admin creating Teachers and Students, and Teachers registering Students, are built. Principal creating a School Admin is not built yet: a Principal cannot create accounts, and a School Admin can currently assign the Principal and School Admin roles.
+**Implementation status:** built as of 2026-11-10. Only a Super Admin can create or give the Super Admin, School Admin, Principal and Accountant roles, or change the users who hold them. Teachers can still register students in the API today; the plan leaves student registration to the School Admin and Super Admin.
 
 ---
 
@@ -96,9 +104,12 @@ Examples: Student ID changes, date of birth correction, student name correction,
 | Marks (post-release) | 4 | Admin + Principal | Yes |
 | Student DOB / Name | 4 | Admin + Principal | Yes (ID proof) |
 | Student class/section | 3 | Admin | No |
-| Transfer Certificate | 4 | Admin + Principal | Yes |
-| Fee structure | 3 | Admin | No |
-| Teacher salary | 4 | Admin (Principal notified) | Yes |
+| Transfer Certificate | 4 | Admin and Accountant check together, then Principal | Previous school's TC on admission; no-dues check on leaving |
+| Fee structure | 3 | Accountant drafts, Principal approves | No |
+| Fee discount | 3 | Principal only, never own request | No (reason required) |
+| Teacher leave | — | Principal only (reason required to reject) | No |
+| Teacher salary | 4 | Principal sets it after verifying previous salary proof | Yes (payslip or bank statement) |
+| Teacher bank details | 3 | Accountant checks against cheque or passbook photo | Yes (photo) |
 | School calendar/holiday | 3 | Admin | No |
 
 All tiers write to a single append-only **audit log** (Section 17); nothing is ever hard-deleted from Tier 3/4 records — only superseded, with history retained.
@@ -120,11 +131,17 @@ All tiers write to a single append-only **audit log** (Section 17); nothing is e
 | Reports/Analytics | Full (org-wide) | Full (school) | Full (school) | Class-level | Assigned-subject-level | Fee reports only | Own child only | Own only |
 | Settings/Config | Full | School-level | Limited (approval settings) | — | — | — | — | — |
 
-This is intentionally different from a naive "Admin=Full, everyone else=Less" table: note Accountant has *zero* access to marks/attendance, and Class Teacher has broader visibility than a Subject Teacher without inheriting Admin powers — this mirrors how Indian schools actually separate financial, academic, and administrative staff.
+**Plan changes (2026-11-10):** the Parent column is served through the student's login; the Accountant can *view* student attendance (still no marks); fee discounts and staff leave are decided by the Principal only; Super Admin has full access except salaries, bank details, staff leave and discount approval. See [docs/mvp-plan.md](./docs/mvp-plan.md).
+
+This is intentionally different from a naive "Admin=Full, everyone else=Less" table: note Accountant has *zero* access to marks, and Class Teacher has broader visibility than a Subject Teacher without inheriting Admin powers — this mirrors how Indian schools actually separate financial, academic, and administrative staff.
 
 ---
 
 ## 5. Core Modules — V1 vs. Later
+
+> **Superseded for the first school:** the build follows MVP1/MVP2/MVP3 in
+> [docs/mvp-plan.md](./docs/mvp-plan.md). MVP1 is attendance, registering teachers and
+> students, and leave. The phases below are kept as the original long-term view.
 
 **Phase 1 (MVP — must work for a school to go live digitally):**
 Student registration & ID, class/section management, parent accounts & linking, attendance (manual + optional NFC), basic marks entry (no complex workflow yet — Tier 2 only), homework/diary, announcements, basic fee tracking (view/record, not full payment gateway), core RBAC + audit log.
@@ -192,9 +209,9 @@ Conflict prevention re-uses the same constraint engine as Section 7, applied to 
 
 ## 9. Leave Management
 
-**Student leave:** `Parent submits (dates + reason, optional document) → Class Teacher approves/rejects → Attendance auto-marked as "On Leave" (distinct from "Absent") for approved dates.`
+**Student leave:** `Student or family submits on the student's login (dates + reason, optional document) → Class Teacher approves/rejects → Attendance auto-marked as "On Leave" (distinct from "Absent") for approved dates.`
 
-**Teacher/Staff leave:** `Teacher submits → Principal/Admin approves/rejects → triggers Substitute Management (Section 8) if approved → Teacher's own attendance reflects leave, not absence.`
+**Teacher/Staff leave:** `Teacher submits → only the Principal is notified and approves/rejects (a rejection needs a reason) → teacher notified → Admin sees approved leaves to arrange cover → triggers Substitute Management (Section 8) if approved → Teacher's own attendance reflects leave, not absence.` The Principal's own leave is not handled in the app.
 
 Leave balances (casual/sick/earned) are tracked per staff member; Admin configures entitlements per role.
 
@@ -206,7 +223,9 @@ Structure: a school defines one or more **Fee Structures** (e.g., "Grade 8 – 2
 
 Supported: online payment gateway integration (Razorpay/Cashfree are common in India), auto-generated receipts, due-date reminders (staggered — e.g., 7 days, 1 day, on due date, then overdue), payment history, and refund workflow (Tier 3 — requires Admin approval).
 
-**Separation of duties:** Accountant can collect and record payments and issue receipts, but cannot alter a fee structure or grant a discount without Admin approval (Tier 3) — this prevents a single role from both setting and collecting fees unchecked.
+**Separation of duties:** Accountant can collect and record payments and issue receipts, but cannot alter a fee structure or grant a discount without the **Principal's** approval — this prevents a single role from both setting and collecting fees unchecked. A discount is always a request with a reason; nobody applies one directly, Super Admin included, and nobody approves their own request.
+
+**Salaries (plan, MVP2–3):** the Principal sets each teacher's salary; the Accountant sees it to pay it and records payments. Bank account numbers are stored encrypted and shown as `XXXX6789`; the Accountant uses a logged Reveal or the bank's bulk file on payday.
 
 ---
 
@@ -232,7 +251,7 @@ Assets (Asset ID, category, location, assigned-to, condition, purchase info, mai
 
 ## 14. Certificates & Documents
 
-Certificate generation (Bonafide, Study, Transfer Certificate, ID cards, report cards, fee receipts) is templated and populated from verified student data — never manually retyped, to avoid transcription errors on official documents. Issuance of high-stakes documents (Transfer Certificate) is Tier 4 (Section 3): Admin initiates, Principal approves, then the document is generated and locked (immutable, re-issuance creates a new versioned copy rather than overwriting).
+Certificate generation (Bonafide, Study, Transfer Certificate, ID cards, report cards, fee receipts) is templated and populated from verified student data — never manually retyped, to avoid transcription errors on official documents. Issuance of high-stakes documents (Transfer Certificate) follows the agreed leaving flow (MVP2): the student requests on the app or the Admin raises it for a visiting parent; the Admin (records, library, ID card) and the Accountant (no dues) check at the same time; the Principal approves; then a numbered TC is generated and locked (immutable, re-issuance creates a new versioned copy rather than overwriting). Any step can send it back with a reason. The student's login stays read-only for 30 days, then closes; records are kept.
 
 ---
 
@@ -240,13 +259,15 @@ Certificate generation (Bonafide, Study, Transfer Certificate, ID cards, report 
 
 Event-driven notifications (attendance marked absent, fee due, exam result released, homework assigned, leave approved/rejected, teacher absent → Principal, complaint status change, announcements) are configurable per user for channel (push / SMS / in-app) and, where reasonable, frequency (e.g., daily digest vs. immediate) to avoid notification fatigue — a common complaint with Indian school apps that over-notify parents.
 
+**Announcements and events (plan, MVP2):** Super Admin, Principal and Admin post to the whole school; teachers only to their own classes; students cannot post. Each post has a type (event, fee reminder, holiday, emergency, general), message, optional images and an end date, scrolls in a banner at the top of the app until then, and notifies its audience. Only Super Admin, Principal and Admin post emergencies, which stay pinned.
+
 ---
 
 ## 16. Role Dashboards
 
 - **Principal:** student/attendance/teacher-attendance summary, pending approvals queue, fee collection summary, exam status, complaints needing attention, leave requests, alerts (e.g., repeated complaints).
 - **Teacher:** today's timetable, pending attendance, pending marks entry, homework to review, own leave status, notifications.
-- **Parent:** child's attendance, homework, marks (post-release), fee status, announcements, leave status, feedback/complaint tracker.
+- **Student (used by the family):** attendance, homework, marks (post-release), fee status, announcements, leave status, feedback/complaint tracker, and earlier classes' records to download. There is no separate parent dashboard in the plan.
 - **Admin:** operational overview, user management, module configuration, audit log access, data-quality flags (e.g., incomplete student records), reports.
 - **Accountant:** fee collection dashboard, overdue list, reconciliation view — no academic widgets at all.
 
@@ -262,7 +283,7 @@ Every Tier 2–4 change records: who, what field, previous value, new value, tim
 
 Design should align with the **Digital Personal Data Protection (DPDP) Act, 2023** principles: purpose limitation (collect only what's needed), consent for processing (parent consent captured at admission for data use), data minimization, breach notification readiness, and a defined data retention/deletion policy for students who leave the school (retain academic records per applicable education-board/RTE requirements, but restrict access once the student exits).
 
-**Never exposed to unauthorized roles:** medical/sensitive information (visible only to Admin/Principal/school nurse if that role exists, never to teachers by default), complaint submitter identity (Section 6), salary information (only the individual + Admin/Principal), and raw payment/financial instrument details (only Accountant/Admin, and never stored beyond what the payment gateway requires — card/bank details should never touch the school's own database; use tokenized payment gateway references only).
+**Never exposed to unauthorized roles:** medical/sensitive information (visible only to Admin/Principal/school nurse if that role exists, never to teachers by default), complaint submitter identity (Section 6), salary information (only the teacher, the Principal and the Accountant who pays it — not Admin or Super Admin; every view logged), Aadhaar (shown masked to everyone except the student and the Accountant, whose Reveal is logged), teacher bank details (encrypted, masked), and raw payment/financial instrument details (only Accountant/Admin, and never stored beyond what the payment gateway requires — card/bank details should never touch the school's own database; use tokenized payment gateway references only).
 
 Passwords: hashed (never stored plain), with standard lockout/rate-limiting on login attempts; role-based session scoping so a compromised parent account cannot reach staff-only endpoints.
 
@@ -304,6 +325,9 @@ Why not Firebase-as-primary-database: Firestore's document model makes the stric
 ---
 
 ## 21. Phased Roadmap
+
+> For the first school, the roadmap is MVP1 (attendance, registration, leave), MVP2 and MVP3
+> in [docs/mvp-plan.md](./docs/mvp-plan.md). The phases below are the original long-term view.
 
 **Phase 1 — MVP (target: a school can go fully digital for daily operations)**
 Student/parent/teacher registration & RBAC core, attendance (manual + optional NFC), basic marks entry, homework/diary, announcements, basic fee tracking, audit log foundation.
