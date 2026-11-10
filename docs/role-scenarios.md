@@ -3,7 +3,7 @@
 What each role can do in the backend as of 2026-11-10 (`/api/v1`), based on the
 seeded permissions in `backend/prisma/seed.ts` and the service code. Every
 scenario marked **Works** is exercised by the end-to-end suite
-(`npm run test:e2e`, 589 checks passing).
+(`npm run test:e2e`, 599 checks passing).
 
 This page describes the API as built. The agreed plan, including changes not built yet
 (no parent login, admission-number login for students, salary, TC, promotion), is in

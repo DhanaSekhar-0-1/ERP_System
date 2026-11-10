@@ -42,7 +42,7 @@ Shared services in `src/common`:
 |---|---|
 | Prisma schema and migrations | Current (15 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 589/589 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 599/599 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
@@ -101,6 +101,13 @@ then hiding the parent login and unused modules, hosting, and a device test. Alo
 2. A separate client database and hosting for the one-month pilot.
 3. Try real cards on an NFC phone.
 4. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+
+Done 2026-11-10: Admin attendance dashboard (step 6b). The web Attendance page now shows the
+day across the school (summary tiles), Teachers today with corrections, every section of the
+active year (present, absent, on leave, not marked, %), a section's students with today's
+status and year-to-date %, and links to a new student details page with monthly attendance per
+year. Checked in the browser: a correction (Divya Rao, Present 08:50, reason shown), Class 8-A
+students (66.7% shown in red), and a student's details page.
 
 Done 2026-11-10: teacher check-in and check-out (step 6a). Teachers check in and out on the
 phone only within the school's radius (default 200 m; readings rougher than 150 m refused),

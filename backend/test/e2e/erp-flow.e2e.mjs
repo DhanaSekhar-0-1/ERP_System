@@ -412,6 +412,20 @@ async function main() {
   const yesterdayView = (await expect('School Admin opens yesterday', admin, 'GET', `/staff-attendance?date=${yesterday}`)).data;
   check('corrected day shows; teachers with no record show Absent for a past day', rowOf(yesterdayView, testTeacherStaff?.id)?.status === 'PRESENT' && rowOf(yesterdayView, lakshmi.id)?.status === 'ABSENT', [rowOf(yesterdayView, testTeacherStaff?.id)?.status, rowOf(yesterdayView, lakshmi.id)?.status]);
 
+  heading('Attendance dashboard');
+  await expect('a teacher cannot open the dashboard', teacher, 'GET', '/attendance-dashboard', undefined, 403);
+  const dashDay = (await expect('School Admin opens the day', admin, 'GET', `/attendance-dashboard?date=${day(0)}`)).data;
+  const dash8B = dashDay?.sections?.find((s) => s.sectionId === secB.id);
+  check('every section of the year is listed with counts', dash8B && dash8B.students >= 1 && dash8B.notMarked === dash8B.students - dash8B.marked, dash8B);
+  check('the day has a school-wide summary', typeof dashDay?.summary?.students === 'number' && dashDay.summary.students >= dash8B.students, dashDay?.summary);
+  const dashSection = (await expect('School Admin opens 8-B', admin, 'GET', `/attendance-dashboard/sections/${secB.id}?date=${day(0)}`)).data;
+  const raviRow = dashSection?.students?.find((r) => r.studentId === newStudent.id);
+  check('the registered student is listed with a year figure', raviRow?.admissionNo === `E2E-${RUN}` && raviRow?.year && 'percent' in raviRow.year, raviRow);
+  await expect('Principal can open the dashboard too', principal, 'GET', '/attendance-dashboard');
+  const profile = (await expect('School Admin opens a student', admin, 'GET', `/attendance-dashboard/students/${newStudent.id}`)).data;
+  check('student profile has details, masked Aadhaar and years', profile?.admissionNo === `E2E-${RUN}` && profile?.aadhaarMasked?.startsWith('XXXX') && !('aadhaarEncrypted' in (profile ?? {})) && Array.isArray(profile?.years), profile && { ...profile, years: profile.years?.length });
+  await expect('another student cannot open this profile', student, 'GET', `/attendance-dashboard/students/${newStudent.id}`, undefined, 403);
+
   heading('Students, enrollment, guardians (continued)');
   const visible = (await call(teacher, 'GET', '/students?search=TEST-STUDENT-001')).data;
   check('teacher sees students in assigned classes', visible.some((s) => s.id === studentId), visible?.map((s) => s.firstName));

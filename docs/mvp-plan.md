@@ -214,6 +214,13 @@ One web page for the School Admin, Principal and Super Admin:
 - **Overall %:** each student's attendance for the academic year so far, counted from the
   admission date for students who joined mid-year.
 - **Student details page:** click a student to see their details and monthly attendance.
+- **Built (2026-11-10):** web Attendance page (date picker, summary tiles, Teachers today with a
+  Correct dialog, sections with a class filter, a section's students with today's status and
+  year-to-date %, CSV export kept) and `/students/:id` details page. Routes
+  `GET /attendance-dashboard`, `/attendance-dashboard/sections/:id`,
+  `/attendance-dashboard/students/:id` (leaders; the student route also follows the normal
+  student access rules). The % counts only marked days, leaving out leave and excused days, so
+  a student who joined mid-year is counted from admission; below 75% shows in red.
 
 ---
 
@@ -264,8 +271,8 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 5 | Teacher registration: app-made ID, subjects | Done 2026-11-10 |
 | 5a | "Choose a new password" screen in the web and phone apps (the server already blocks other routes until the first password changes) | Done 2026-11-10 |
 | 6a | Teacher check-in and check-out (location, late time, Admin corrections, settings) | Done 2026-11-10 |
-| 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | Next |
-| 7 | Leave screens on web and phone | |
+| 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | Done 2026-11-10 |
+| 7 | Leave screens on web and phone | Next |
 | 8 | Hide parent login and unused modules; host; Android build; device test | |
 
 Admin and Super Admin work on the **web**; the phone app is for teachers and students.

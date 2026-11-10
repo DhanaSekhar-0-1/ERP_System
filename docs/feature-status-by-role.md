@@ -84,6 +84,7 @@ Runs the school day to day.
 | Feature | API | Screen |
 |---|---|---|
 | Overview: attendance today, weekly trend, students at risk | Done | Done (web) |
+| Attendance dashboard: day by section, teachers today with corrections, year-to-date % per student, student details with monthly attendance | Done | Done (web) |
 | Classes and sections: create, rename, delete when empty; Section A and default subjects are added automatically | Done | Done (web) |
 | Per-section subjects: add, rename, remove, switch optional ones on and off | Done | Done (web) |
 | Default subject list for new sections (Sanskrit optional) | Done | Done (web) |

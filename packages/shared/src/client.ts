@@ -31,7 +31,10 @@ import type {
   SchoolClass,
   Section,
   SectionSubject,
+  AttendanceDashboardDay,
+  DashboardSectionStudents,
   DeviceLocation,
+  StudentAttendanceProfile,
   Gender,
   RegisteredTeacher,
   StaffAttendanceDay,
@@ -298,6 +301,11 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
       input: { date: string; status: StaffAttendanceStatus; checkInTime?: string; checkOutTime?: string; reason: string },
     ) => call<StaffAttendanceRecord>('PUT', `/staff-attendance/${staffId}`, input),
     staffAttendanceSettings: () => call<StaffAttendanceSettings>('GET', '/staff-attendance/settings'),
+    attendanceDashboard: (date?: string) => call<AttendanceDashboardDay>('GET', `/attendance-dashboard${query({ date })}`),
+    attendanceDashboardSection: (sectionId: string, date?: string) =>
+      call<DashboardSectionStudents>('GET', `/attendance-dashboard/sections/${sectionId}${query({ date })}`),
+    studentAttendanceProfile: (studentId: string) =>
+      call<StudentAttendanceProfile>('GET', `/attendance-dashboard/students/${studentId}`),
     saveStaffAttendanceSettings: (input: Partial<Pick<StaffAttendanceSettings, 'latitude' | 'longitude' | 'radiusMeters' | 'lateAfter'>>) =>
       call<StaffAttendanceSettings>('PUT', '/staff-attendance/settings', input),
     staffAssignments: (academicYearId: string) =>

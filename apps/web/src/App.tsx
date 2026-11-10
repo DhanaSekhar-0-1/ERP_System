@@ -13,6 +13,7 @@ import { NewPasswordPage } from './pages/NewPasswordPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StudentsPage } from './pages/StudentsPage';
+import { StudentDetailPage } from './pages/StudentDetailPage';
 import { TeachersPage } from './pages/TeachersPage';
 import {
   MarkSheetPage,
@@ -49,6 +50,7 @@ export function App() {
           <Route path="exams" element={<ExamsPage />} />
           <Route path="teachers" element={<TeachersPage />} />
           <Route path="students" element={<StudentsPage />} />
+          <Route path="students/:studentId" element={<StudentDetailPage />} />
           <Route path="attendance" element={<AttendancePage />} />
           <Route path="approvals" element={<ApprovalsPage />} />
           <Route path="settings" element={<SettingsPage />} />

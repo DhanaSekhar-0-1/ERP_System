@@ -452,3 +452,70 @@ export interface DeviceLocation {
   accuracy: number;
 }
 
+/** Counts of marked days; percent leaves out leave and excused days (null when nothing counted). */
+export interface AttendanceCounts {
+  present: number;
+  late: number;
+  absent: number;
+  onLeave: number;
+  excused: number;
+  percent: number | null;
+}
+
+export interface DashboardSection extends AttendanceCounts {
+  sectionId: string;
+  classId: string;
+  label: string;
+  className: string;
+  sectionName: string;
+  students: number;
+  marked: number;
+  notMarked: number;
+}
+
+export interface AttendanceDashboardDay {
+  date: string;
+  summary: AttendanceCounts & { students: number; marked: number; notMarked: number };
+  sections: DashboardSection[];
+}
+
+export interface DashboardSectionStudents {
+  date: string;
+  sectionId: string;
+  label: string;
+  students: {
+    studentId: string;
+    name: string;
+    admissionNo: string;
+    rollNumber: string | null;
+    status: AttendanceStatus | null;
+    year: AttendanceCounts;
+  }[];
+}
+
+export interface StudentAttendanceProfile {
+  id: string;
+  admissionNo: string;
+  firstName: string;
+  lastName: string | null;
+  gender: Gender | null;
+  dateOfBirth: string | null;
+  admissionDate: string | null;
+  admissionType: 'NEW_TO_SCHOOL' | 'EXISTING' | null;
+  bloodGroup: string | null;
+  address: string | null;
+  nfcId: string | null;
+  aadhaarMasked: string | null;
+  aadhaarEnrolmentNo: string | null;
+  isArchived: boolean;
+  guardians: { isPrimary: boolean; guardian: { name: string; phone: string | null; relation: string | null } }[];
+  years: {
+    academicYear: { id: string; name: string; isActive: boolean };
+    label: string;
+    rollNumber: string | null;
+    status: string;
+    overall: AttendanceCounts;
+    months: (AttendanceCounts & { month: string })[];
+  }[];
+}
+
