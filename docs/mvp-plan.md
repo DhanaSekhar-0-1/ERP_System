@@ -272,7 +272,7 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 5a | "Choose a new password" screen in the web and phone apps (the server already blocks other routes until the first password changes) | Done 2026-11-10 |
 | 6a | Teacher check-in and check-out (location, late time, Admin corrections, settings) | Done 2026-11-10 |
 | 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | Done 2026-11-10 |
-| 7 | Leave screens on web and phone | Next |
+| 7 | Leave screens on web and phone: teacher's own leave request (phone), Principal decides teacher leave (web, reason to reject), Admin sees approved leaves (web). Student leave request and class-teacher decision already exist on the phone | Next (resume here) |
 | 8 | Hide parent login and unused modules; host; Android build; device test | |
 
 Admin and Super Admin work on the **web**; the phone app is for teachers and students.
@@ -329,4 +329,11 @@ required.
 ## 8. Open items
 
 - The first-password pattern can be guessed by classmates; the forced change at first login is
-  what keeps it safe, so it must not be skippable.
+  what keeps it safe, so it must not be skippable (built: the server refuses every other route,
+  and both apps show only the choose-a-new-password screen).
+- A fake-location app can cheat teacher check-in; the dashboard and corrections are the check.
+- Server packages flagged by `npm audit` (high and critical) must be updated before the pilot.
+- Nothing has been tried on a real phone yet: phone screens, check-in at school, NFC cards.
+- Suggested, not yet confirmed: grade instead of percentage, board, "TC pending" and "first
+  school" for students new to the school (section 3).
+- Where work stopped and how to resume: [STATUS.md section 0](../STATUS.md#0-resume-here-stopped-2026-11-10-end-of-day).

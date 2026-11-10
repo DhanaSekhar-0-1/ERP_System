@@ -1,6 +1,6 @@
 # Feature Status by Role
 
-What is done, what is not, and what comes next for each role, as of 2026-11-10.
+What is done, what is not, and what comes next for each role, as of 2026-11-10 (end of day).
 See [STATUS.md](../STATUS.md) for platform status, [role-scenarios.md](./role-scenarios.md)
 for detailed flows, and [apps/README.md](../apps/README.md) to run the apps.
 
@@ -264,7 +264,9 @@ requests and Aadhaar Reveal; fee screens in MVP3.
 
 ## What comes next
 
-The MVP1 build order is in [mvp-plan.md](./mvp-plan.md#5-mvp1-build-order). Alongside it:
+The MVP1 build order is in [mvp-plan.md](./mvp-plan.md#5-mvp1-build-order); steps 1–6b are done
+and step 7 (leave screens) is next. Where to resume: [STATUS.md section 0](../STATUS.md#0-resume-here-stopped-2026-11-10-end-of-day).
+Alongside it:
 
 1. Change the passwords that are readable in the repository's history.
 2. Host the backend, web and a separate client database for the pilot.

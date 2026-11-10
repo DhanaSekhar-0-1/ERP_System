@@ -96,6 +96,18 @@ registration transaction and is stored in `staff_profiles.employee_no`; the firs
 random and must be changed at first login. Subjects are checked against
 `GET /staff/teaching-subjects`. Teachers sign in with the Teacher ID or their email.
 
+**Teacher attendance** (`modules/staff-attendance`): teachers check in and out at school
+(`/staff-attendance/check-in`, `/check-out`, `/me/today`); only the distance from the school
+location in settings is stored. School leaders read the day (`GET /staff-attendance`); the
+School Admin and Super Admin correct a day with a reason (`PUT /staff-attendance/:staffId`) and
+change the settings (`PUT /staff-attendance/settings`). Days and the late time use the school's
+time zone (`common/identity/school-time.ts`).
+
+**Attendance dashboard** (`AttendanceDashboardService`): `GET /attendance-dashboard` (a day by
+section), `/attendance-dashboard/sections/:id` (students with year-to-date %),
+`/attendance-dashboard/students/:id` (details and monthly attendance). The % counts marked days
+only and leaves out leave and excused days.
+
 **Excel import script** (`scripts/import-students.ts`, uses `exceljs`):
 
 ```bash

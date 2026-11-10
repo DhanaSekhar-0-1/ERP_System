@@ -12,6 +12,67 @@ Related documents:
 - [backend/README.md](./backend/README.md) - setup, conventions, and module reference
 - [CMD.md](./CMD.md) - local run and test commands
 
+## 0. Resume here (stopped 2026-11-10, end of day)
+
+**Branch:** `feature/mvp1` (pushed; last commit `9174298`). `main` is at `7d83a52` and has none
+of the MVP1 work yet. Never push MVP1 work to `main` directly.
+
+**MVP1 progress** (full table in [docs/mvp-plan.md](./docs/mvp-plan.md#5-mvp1-build-order)):
+steps 1–6b are done; **step 7 (leave screens) is next**, then step 8.
+
+| Step | What | Commit |
+|---|---|---|
+| 2, 2a | Account rules (Super Admin-only senior accounts), Principal-only staff leave and discounts, approval loophole closed | `c66f3c0`, `ccd1465` |
+| 3 | MVP1 database fields | `952f8ca` |
+| 4 | Student registration, admission-number login, Excel import endpoint; hardening | `0f03b80`, `81da79b` |
+| 4+ | Excel import script `npm run import:students` | `32b2627` |
+| 5, 5a | Teacher registration (Teacher ID T26A05); choose-your-own-password screen (web + phone) | `62d4214`, `d7146aa` |
+| 6a, 6b | Teacher check-in/out at school; Admin attendance dashboard and student details page | `8ba0b80`, `9174298` |
+
+**Step 7 — leave screens (start here).** What already exists and what is missing:
+
+- Built: student leave request on the phone (`apps/mobile/app/family/leave.tsx`); class teacher
+  decides student leave on the phone (`apps/mobile/app/staff/leaves.tsx`); all leave APIs,
+  with staff leave decided by the Principal only and a reason required to reject.
+- To build: (1) teacher's own leave request on the phone (no staff-leave calls in
+  `packages/shared` yet); (2) web screen for the **Principal** to approve or reject teacher
+  leave (reason required); (3) web view for the **Admin** of teachers and students on approved
+  leave (today and upcoming), linked from the dashboard; (4) check whether student leave should
+  also be decided on the web. Ask the user before building anything the plan does not settle.
+
+**Step 8 after that:** hide the parent login and every module not in MVP1; host the backend,
+web and a separate client database; Android build; test on a real phone (including a real
+check-in at school and NFC cards).
+
+**How to run and test** (details in [CMD.md](./CMD.md) and `.claude/launch.json`):
+
+- Backend `npm run build` then start (`backend` launch config sets `RAZORPAY_WEBHOOK_SECRET`);
+  web on port 3001 (`web`); phone app web preview on 8081 (`mobile-web-preview`).
+- `backend/.env` must have `PII_ENCRYPTION_KEY` (Aadhaar encryption; local only, keep a backup).
+- Test accounts are in `test-org-school.txt` (repository root). After pulling, run
+  `npm run prisma:migrate:deploy` and `npm run prisma:seed` in `backend`.
+- e2e: `npm run test:e2e` in `backend` against a running server (599 checks, about 3 minutes).
+  The suite is one long scenario and cannot run a single section yet.
+
+**Working agreements with the user:**
+
+- Write decisions into the docs (mainly `docs/mvp-plan.md`) before building a step; ask the user
+  when the plan does not settle something, with a recommended option.
+- While building, test only the related APIs and screens (plus type-check and a browser
+  check); run the full e2e suite once before each commit.
+- One commit per step on `feature/mvp1`, pushed to that branch; update STATUS and the role docs
+  in the same commit.
+
+**Open items to remember:**
+
+- `npm audit` lists high and critical issues in existing server packages (`multer`,
+  `body-parser`, `proxy-addr`, `handlebars`); update before the pilot goes online.
+- The development database holds many test records from e2e runs (teachers, `QA-…` and
+  `SCR-…` students, a test student with many parent links); harmless, can be cleaned later.
+- A fake-location app can cheat teacher check-in; the dashboard and corrections are the check.
+- Schools must have their time zone set (Asia/Kolkata is used when it is not).
+- Not tested on a real phone yet: phone screens, check-in at school, NFC cards.
+
 ## 1. Architecture
 
 ```text
@@ -92,15 +153,16 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 ## 5. Next steps
 
 MVP1 is being built on branch `feature/mvp1`, in the order set in
-[docs/mvp-plan.md](./docs/mvp-plan.md#5-mvp1-build-order): database changes for the new teacher
-and student fields, student creation with admission-number login and Excel import, teacher
-registration with app-made IDs, teacher check-in and the attendance dashboard, leave screens,
-then hiding the parent login and unused modules, hosting, and a device test. Alongside it:
+[docs/mvp-plan.md](./docs/mvp-plan.md#5-mvp1-build-order). Steps 1–6b are done; next are the
+leave screens (step 7), then hiding the parent login and unused modules, hosting, and a device
+test (step 8). See section 0 above for where to resume. Alongside it:
 
-1. Change the test passwords that are readable in the repository history.
-2. A separate client database and hosting for the one-month pilot.
-3. Try real cards on an NFC phone.
-4. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+1. Update the server packages flagged by `npm audit` (high and critical) before the pilot.
+2. Change the test passwords that are readable in the repository history.
+3. A separate client database and hosting for the one-month pilot.
+4. Try real cards on an NFC phone, and a real check-in at school.
+5. Split the e2e suite so one area can run on its own (offered to the user, not started).
+6. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
 
 Done 2026-11-10: Admin attendance dashboard (step 6b). The web Attendance page now shows the
 day across the school (summary tiles), Teachers today with corrections, every section of the
