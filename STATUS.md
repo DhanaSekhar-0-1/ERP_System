@@ -41,7 +41,7 @@ Shared services in `src/common`:
 |---|---|
 | Prisma schema and migrations | Current (13 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 460/460 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 462/462 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
@@ -57,7 +57,7 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 | Module | Status | Notes |
 |---|---|---|
 | Authentication and sessions | Done | Login by email/student ID/staff ID, refresh, logout, forgot/reset/change password, OTP, session list and revoke, MFA endpoints, lockout after 5 failures in 15 min |
-| Organizations, schools, settings | Done | Super Admin limited to own organization; archived schools blocked. In its own school, Super Admin can also register teachers, assign subjects and class teachers, create exams, and give both mark approvals |
+| Organizations, schools, settings | Done | Super Admin limited to own organization; archived schools blocked. Super Admin has full access (every permission any role has, applied by `npm run prisma:seed`) and can fill any approval slot, though Tier 4 still needs a second person |
 | Users, roles, permissions | Done | Permission overrides, email sync to Supabase, built-in roles cannot be renamed |
 | Academic years | Done | Activate, close, rollover (copy structure, optional promotion), summary |
 | Classes, sections, subjects | Done | A new class gets Section A; every new section gets its own copy of the school's default subjects (Sanskrit optional and off). Subjects are per section, so renaming or switching one off affects that section only. Delete is refused while students, exams, homework, fees or timetables depend on it; a class keeps at least one section. Web: Classes & Sections with Sections, Subjects, Teacher assignments and Students tabs, and Settings for the default subjects |

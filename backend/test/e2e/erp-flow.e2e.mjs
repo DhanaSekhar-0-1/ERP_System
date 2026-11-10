@@ -399,6 +399,9 @@ async function main() {
     const superExam = (await expect('Super Admin creates FA2', superAdmin, 'POST', '/examinations', { academicYearId: year.id, type: 'FA2' })).data;
     check('FA2 created', superExam?.name === 'FA2', superExam);
     await expect('Super Admin lists staff', superAdmin, 'GET', '/staff');
+    // Full access: modules that were closed to Super Admin before.
+    await expect('Super Admin reads overdue fees', superAdmin, 'GET', '/fees/overdue');
+    await expect('Super Admin reads complaints', superAdmin, 'GET', '/complaints');
   } else {
     console.log('  SKIP  Super Admin checks: no "Super Admin:" block in the credentials file');
   }
@@ -466,7 +469,8 @@ async function main() {
   check('assigned to both students', assigned?.assigned === 2, assigned);
   const fees = (await expect('student reads own fees', student, 'GET', '/student-fees')).data;
   check('student sees only own fee', fees?.length >= 1 && fees.every((f) => f.studentId === studentId), fees?.length);
-  const fee = fees.find((f) => f.feeStructureId === structure.id);
+  // Filter by this run's structure: the student's fees from earlier runs push it past page one.
+  const fee = (await call(student, 'GET', `/student-fees?feeStructureId=${structure.id}`)).data?.[0];
   check('balance is 13000', fee?.balance === 13000, fee?.balance);
   const discount = (await expect('discount applied directly by School Admin', admin, 'POST', `/student-fees/${fee.id}/apply-discount`, { amount: 1000, reason: 'Sibling discount' })).data;
   check('discount reduces balance to 12000', discount?.studentFee?.balance === 12000, discount?.studentFee?.balance);

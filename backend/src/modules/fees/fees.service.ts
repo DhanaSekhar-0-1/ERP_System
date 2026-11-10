@@ -378,7 +378,7 @@ export class FeesService implements OnModuleInit {
       payload: { amount: input.amount },
       tier: 3,
     });
-    if (context.isSchoolAdmin || context.isPrincipal) {
+    if (context.isLeader) {
       await this.approvals.approve(context, request.id, 'Applied by approver');
       return { applied: true, studentFee: await this.findStudentFee(authUser, fee.id) };
     }

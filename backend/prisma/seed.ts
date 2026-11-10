@@ -13,7 +13,9 @@ const MEMBER = [
 const roleDefinitions = [
   {
     name: 'Super Admin',
-    description: 'Organization-wide platform administrator',
+    description: 'Organization-wide platform administrator with full access',
+    // Full access: main() also gives Super Admin every permission any other role has.
+    // These are the permissions only Super Admin holds, plus its original set.
     permissions: [
       ...MEMBER,
       'organizations:read',
@@ -22,7 +24,6 @@ const roleDefinitions = [
       'schools:manage',
       'users:read',
       'users:manage',
-      // School-level setup in the Super Admin's own school: teachers, subjects and exams.
       'staff:read',
       'staff-assignments:read',
       'staff-assignments:manage',
@@ -303,6 +304,9 @@ const roleDefinitions = [
   },
 ];
 
+/** Every permission code used by any role. Super Admin gets all of them. */
+const ALL_PERMISSIONS = [...new Set(roleDefinitions.flatMap((definition) => definition.permissions))];
+
 async function main(): Promise<void> {
   for (const definition of roleDefinitions) {
     const role = await prisma.role.upsert({
@@ -318,7 +322,8 @@ async function main(): Promise<void> {
       },
     });
 
-    const codes = [...new Set(definition.permissions)];
+    const codes =
+      definition.name === 'Super Admin' ? ALL_PERMISSIONS : [...new Set(definition.permissions)];
     for (const code of codes) {
       const permission = await prisma.permission.upsert({
         where: { code },

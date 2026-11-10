@@ -25,7 +25,7 @@ Android, but their flows have not been checked by hand on a device, so they are 
 
 | Role | App | Screens today | Biggest gap |
 |---|---|---|---|
-| Super Admin | Web | Every School Admin page | No student, fee, timetable or academic-year management |
+| Super Admin | Web | Every School Admin page | Full access in the API, but the same missing screens as School Admin, and no organization, user or role screens |
 | School Admin | Web | Overview, Classes & Sections, Teacher Assignments, Exams & Reports, Teachers, Students, Attendance, Approvals, Settings | No screens for student registration, fees, timetables, leave or academic years |
 | Principal | Web | Same pages, read-only where they cannot change things; releases exam sections | Cannot create a School Admin |
 | Teacher | Web and mobile | My classes, Attendance (class teacher), Marks entry, Slip tests; mobile Attendance, Subjects, Leave, Notices | No homework screens; phone marks entry untested on a device |
@@ -41,8 +41,10 @@ teacher assignments, exam types, slip tests and per-section exam release were ad
 
 ## Super Admin
 
-The developer and organization account. Works across its organization for schools and
-users, and inside its own school for everything else. It has 43 permissions today.
+The developer and organization account, with **full access** since 2026-11-10. It works across
+its organization for schools and users, and inside its own school for everything else. The seed
+gives it every permission any role has (75 today), so a permission added to another role
+reaches Super Admin the next time `npm run prisma:seed` runs.
 
 | Feature | API | Screen |
 |---|---|---|
@@ -51,23 +53,25 @@ users, and inside its own school for everything else. It has 43 permissions toda
 | Roles, role permissions, per-user permission overrides | Done | Not built |
 | Classes, sections and per-section subjects; default subject list | Done | Done (web) |
 | Register teachers; subject teachers and class teachers | Done | Done (web) |
-| Exams: create for one or several classes, add subjects | Done | Done (web) |
+| Exams: create for one or several classes, add subjects; enter and correct marks | Done | Done (web), except marks entry |
 | Exam approval: approve sections and release them (both steps) | Done | Done (web) |
-| Approval requests, audit and security logs, reports, analytics | Done | Approvals only |
-| Students and attendance: read only | Done | Done (web) |
-| Homework and announcements | Done | Not built |
-
-**Cannot do:** academic years, student registration or editing, parent logins, entering
-marks, fees, leave, timetables, complaints, certificates, library, transport, assets.
+| Approval requests: fills any slot, including the Principal's on Tier 4 | Done | Done (web) |
+| Students and attendance: view, plus register, edit, archive; mark and correct attendance | Done | View only (web) |
+| Academic years, enrollment, promotion, transfers; guardians and parent logins | Done | Not built |
+| Fees, payments, discounts (applied directly), refunds | Done | Not built |
+| Leave, timetables, substitutes, homework, announcements, complaints, certificates | Done | Not built |
+| Transport, library, assets, offline sync, notifications admin | Done | Not built |
+| Audit and security logs, reports, analytics | Done | Not built |
 
 **Things to know:**
 
 - It can give both exam approvals, so it can release results on its own.
+- On a Tier 4 request it can fill either slot, but one person still cannot approve the same
+  request twice, so a second approver is always needed.
 - It can give any user extra permissions, and no check stops it doing so for itself.
 - Nothing is deleted permanently: schools, users and students are archived or deactivated.
 
-**Next:** decide its final scope (full access, as first planned, with archiving instead of
-deleting and every action audited).
+**Next:** screens for organizations, schools, users and roles.
 
 ## School Admin
 

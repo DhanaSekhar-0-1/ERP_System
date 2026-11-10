@@ -254,7 +254,9 @@ export class ApprovalEngine {
     if (role === ROLE.SCHOOL_ADMIN) {
       return context.isSchoolAdmin || context.isSuperAdmin;
     }
-    return context.roles.includes(role);
+    // Super Admin has full access and can fill any slot. One person still cannot fill two slots
+    // on the same request, so Tier 4 always needs a second approver.
+    return context.isSuperAdmin || context.roles.includes(role);
   }
 
   private async pending(context: SchoolContext, requestId: string) {
