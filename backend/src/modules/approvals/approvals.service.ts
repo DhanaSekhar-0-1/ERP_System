@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../common/database/database.service';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
@@ -66,6 +66,13 @@ export class ApprovalsService {
     // Teachers raise attendance and mark corrections through those modules, which check their assignment.
     if (context.isTeacher && !context.isLeader) {
       throw new ForbiddenException('Teachers cannot raise general approval requests');
+    }
+    // Each request type is raised from its own route, which sets the right tier and checks the
+    // record, so the caller cannot choose an easier tier here.
+    if (!this.engine.allowsGeneralRequest(input.type)) {
+      throw new BadRequestException(
+        `${input.type} requests must be raised from their own screen or route, not as a general request`,
+      );
     }
     return this.engine.create(context, input);
   }

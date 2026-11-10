@@ -123,7 +123,7 @@ Oversight and final approval.
 | Exams: create, add classes and subjects | Done | Done (web) |
 | Release approved exam sections, one at a time or all approved at once; send back | Done | Done (web) |
 | Approve Tier 3 changes; give the Principal's approval on Tier 4 | Done | Done (web) |
-| Approve fee discounts: the only role that can, never its own request | Done | Not built |
+| Approve fee discounts and fee structures: the only role that can, never its own request | Done | Not built |
 | Staff leave decisions (only the Principal; a rejection needs a reason); student leave | Done | Not built |
 | Timetables and substitutes | Done | Not built |
 | Complaints, announcements, homework | Done | Not built |
@@ -225,19 +225,15 @@ requests and Aadhaar Reveal; fee screens in MVP3.
 
 ## Known problems
 
-1. **Approval tiers can be bypassed.** `POST /approval-requests` lets the caller choose the
-   tier, and the approval engine does not stop people approving their own requests. A School
-   Admin can file a Tier 4 change as Tier 3 and approve it alone. Closed for teachers, and for
-   fee discounts (Principal only, no self-approval) since 2026-11-10.
-2. **A card ID is required to register a student.**
-3. **Older school-wide subjects** (created before subjects became per-section) do not appear
+1. **A card ID is required to register a student.**
+2. **Older school-wide subjects** (created before subjects became per-section) do not appear
    on the new screens. Assignments that use them still work, and they cover the section
    subjects with the same code in exams.
-4. **Sections with no students** count as complete, so they must still be approved and
+3. **Sections with no students** count as complete, so they must still be approved and
    released before an exam shows as fully released.
-5. **Supabase-side sign-outs** take effect when the token expires (usually within an hour),
+4. **Supabase-side sign-outs** take effect when the token expires (usually within an hour),
    because tokens are now checked locally. Sign-outs through the app apply at once.
-6. **The permission cache is per server.** With several backend servers, a role change could
+5. **The permission cache is per server.** With several backend servers, a role change could
    take up to a minute to reach the others.
 
 ## Features not built for any role
@@ -266,8 +262,7 @@ requests and Aadhaar Reveal; fee screens in MVP3.
 
 The MVP1 build order is in [mvp-plan.md](./mvp-plan.md#5-mvp1-build-order). Alongside it:
 
-1. Fix the approval-tier gap for the remaining request types (before MVP1 step 3).
-2. Change the passwords that are readable in the repository's history.
-3. Host the backend, web and a separate client database for the pilot.
-4. Test the phone app on a device with real data and real NFC cards.
-5. CI running build, lint, `db:check-rls` and the e2e suite.
+1. Change the passwords that are readable in the repository's history.
+2. Host the backend, web and a separate client database for the pilot.
+3. Test the phone app on a device with real data and real NFC cards.
+4. CI running build, lint, `db:check-rls` and the e2e suite.

@@ -3,7 +3,7 @@
 What each role can do in the backend as of 2026-11-10 (`/api/v1`), based on the
 seeded permissions in `backend/prisma/seed.ts` and the service code. Every
 scenario marked **Works** is exercised by the end-to-end suite
-(`npm run test:e2e`, 476 checks passing).
+(`npm run test:e2e`, 480 checks passing).
 
 This page describes the API as built. The agreed plan, including changes not built yet
 (no parent login, admission-number login for students, salary, TC, promotion), is in
@@ -95,8 +95,10 @@ flowchart TD
 | Student name, date of birth, admission number; marks after release; re-opening released results; transfer certificate | 4 |
 
 A section transfer is raised by a School Admin or Principal and applies straight away.
-Teachers raise only attendance and mark corrections. A fee discount is always a request:
-nothing changes until the Principal approves it. Super Admin fills the School Admin's slot
+Teachers raise only attendance and mark corrections. Every request is raised from its own
+route, which sets the tier; `POST /approval-requests` refuses them, so a Tier 4 change cannot be
+filed as Tier 3. Someone other than the requester must approve, except a leader's section
+transfer. A fee discount or fee structure is approved only by the Principal. Super Admin fills the School Admin's slot
 on Tier 4 requests, never the Principal's.
 
 ## 4. Permission matrix (seeded)
@@ -190,7 +192,7 @@ flowchart TD
 | Students: register, edit, assign NFC cards, archive/restore, history, documents | Works |
 | Guardians with parent logins; link and unlink children | Works |
 | Enrollment, promote, withdraw, section transfer | Works |
-| Fee structures, assignment to a class, cash/cheque payments, receipts, discount requests, refunds | Works |
+| Fee structures (submitted for the Principal), assignment to a class, cash/cheque payments, receipts, discount and refund requests | Works |
 | Cannot approve discounts or decide staff leave | Works |
 | Cannot create, change, deactivate or give overrides to Principal, School Admin or Accountant accounts | Works |
 | Exam types FA1-FA4, Q1-Q3, Pre-public (Class 10 only), Other; one exam for several classes | Works |
@@ -367,7 +369,6 @@ flowchart LR
 
 | Gap | Effect |
 |---|---|
-| Approval tier is set by the caller | A School Admin or Principal can file a Tier 4 change as Tier 3 through `POST /approval-requests` and approve it alone. Fee discounts are protected (Principal only, no self-approval) |
 | Card ID required at registration | A student cannot be registered first and given a card later |
 | Push, SMS, and email not verified | Senders are written, but only the console sender has been tested |
 | Real NFC cards not tested | Scanning is covered with typed card IDs only |

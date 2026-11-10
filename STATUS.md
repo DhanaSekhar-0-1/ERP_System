@@ -42,7 +42,7 @@ Shared services in `src/common`:
 |---|---|
 | Prisma schema and migrations | Current (13 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 476/476 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 480/480 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
@@ -97,16 +97,17 @@ and student fields, student creation with admission-number login and Excel impor
 registration with app-made IDs, teacher check-in and the attendance dashboard, leave screens,
 then hiding the parent login and unused modules, hosting, and a device test. Alongside it:
 
-1. Fix the approval-tier gap for the remaining request types (`POST /approval-requests` takes the tier from the caller; discounts are already protected).
-2. Change the test passwords that are readable in the repository history.
-3. A separate client database and hosting for the one-month pilot.
-4. Try real cards on an NFC phone.
-5. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+1. Change the test passwords that are readable in the repository history.
+2. A separate client database and hosting for the one-month pilot.
+3. Try real cards on an NFC phone.
+4. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
 
 Done 2026-11-10: the MVP plan was agreed ([docs/mvp-plan.md](./docs/mvp-plan.md)). Super Admin
 got full access; only a Super Admin creates or changes Principal, School Admin and Accountant
 accounts; only the Principal decides staff leave (a rejection needs a reason) and approves fee
-discounts, which are always requests and never self-approved.
+discounts and fee structures. Approval requests can be raised only from their own routes (the
+general route can no longer lower a Tier 4 change to Tier 3), and someone other than the
+requester must approve, except a leader's section transfer.
 
 Done 2026-11-09: class, section, subject and teacher assignment management; per-section exam
 approval and release; multi-class exams; teacher web area; local sign-in checks and a short

@@ -24,8 +24,17 @@ export type ApprovalHandler = (
 export interface ApprovalDefinition {
   onApproved: ApprovalHandler;
   onRejected?: ApprovalHandler;
-  /** When false, the person who raised a request of this type cannot approve it. */
+  /**
+   * When true, the person who raised a request may complete it alone (e.g. a leader moving a
+   * student to another section). By default someone other than the requester must approve.
+   */
   allowSelfApproval?: boolean;
+  /**
+   * When true, requests of this type may be raised through the general
+   * `POST /approval-requests` route. By default they come only from the type's own module,
+   * which sets the right tier and checks the record, so a caller cannot lower the tier.
+   */
+  generalRequest?: boolean;
   /**
    * Who must approve requests of this type, overriding the tier's default slots (e.g. only the
    * Principal). Set on the type so no caller can pick an easier approver.
@@ -46,6 +55,8 @@ export interface CreateApprovalInput {
 /**
  * Tier 3 requests need one School Admin or Principal decision.
  * Tier 4 requests need both a School Admin and a Principal.
+ * A request type may fix its own approvers instead (e.g. only the Principal).
+ * Someone other than the requester must approve, unless the type allows self-approval.
  * The registered handler applies the change inside the same transaction as the final approval.
  */
 @Injectable()
@@ -60,6 +71,11 @@ export class ApprovalEngine {
 
   register(type: string, definition: ApprovalDefinition): void {
     this.definitions.set(type, definition);
+  }
+
+  /** Whether this request type may be raised through the general approval route. */
+  allowsGeneralRequest(type: string): boolean {
+    return this.definitions.get(type)?.generalRequest === true;
   }
 
   async create(context: SchoolContext, input: CreateApprovalInput) {
@@ -147,12 +163,6 @@ export class ApprovalEngine {
     if (decided.some((decision) => decision.approverId === context.userId)) {
       throw new ConflictException('You have already decided on this request');
     }
-    if (
-      this.definitions.get(request.type)?.allowSelfApproval === false &&
-      request.requesterId === context.userId
-    ) {
-      throw new ForbiddenException('You cannot approve a request you raised');
-    }
     const open = request.requiredRoles.filter(
       (role) => !decided.some((decision) => decision.role === role),
     );
@@ -162,6 +172,15 @@ export class ApprovalEngine {
     }
     const complete = open.length === 1;
     const definition = this.definitions.get(request.type);
+    // A request needs at least one approver besides the person who raised it, so nobody can
+    // push a change through alone. A School Admin raising a Tier 4 still fills their own slot;
+    // the Principal completes it.
+    const onlyRequester = [...decided.map((decision) => decision.approverId), context.userId].every(
+      (approverId) => approverId === request.requesterId,
+    );
+    if (complete && onlyRequester && !definition?.allowSelfApproval) {
+      throw new ForbiddenException('Someone other than the person who raised this request must approve it');
+    }
     return this.database.$transaction(async (transaction) => {
       await transaction.approvalDecision.create({
         data: { requestId, approverId: context.userId, role: slot, decision: 'APPROVED', note },

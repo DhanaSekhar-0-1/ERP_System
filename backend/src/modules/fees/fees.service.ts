@@ -47,7 +47,9 @@ export class FeesService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    // The Accountant drafts the year's fee structure; only the Principal approves it.
     this.approvals.register(STRUCTURE_APPROVAL, {
+      approverRoles: [ROLE.PRINCIPAL],
       onApproved: async (transaction, request, approver) => {
         await transaction.feeStructure.update({
           where: { id: request.entityId },
@@ -64,7 +66,6 @@ export class FeesService implements OnModuleInit {
     // Discounts are always a request, and only the Principal may approve one, never their own.
     this.approvals.register(DISCOUNT, {
       approverRoles: [ROLE.PRINCIPAL],
-      allowSelfApproval: false,
       onApproved: async (transaction, request, approver) => {
         const { amount } = request.payload as { amount: number };
         const fee = await transaction.studentFee.findUniqueOrThrow({ where: { id: request.entityId } });

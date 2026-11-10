@@ -49,11 +49,16 @@ roles, or change the users who hold them.
 
 ### Approvals
 
+Every approval request is raised from its own screen or route, which sets the right tier;
+the general `POST /approval-requests` route no longer accepts them. Someone other than the
+person who raised a request must approve it (a section transfer by a School Admin or Principal
+is the one exception and applies at once).
+
 | Change | Who decides | Status |
 |---|---|---|
 | Fee discount | Accountant requests with a reason; only the **Principal** approves, never their own request | Built (2026-11-10) |
 | Teacher (staff) leave | Only the **Principal**; a rejection needs a reason; the teacher is notified | Built (2026-11-10) |
-| Fee structure for the year | Accountant drafts, Principal approves | Change (MVP3) |
+| Fee structure for the year | Accountant drafts, Principal approves | Built (2026-11-10); screens MVP3 |
 | Teacher's new salary | Principal sets it after verifying the previous salary proof | New (MVP2) |
 | Student leaving (TC) | Admin and Accountant check together, then the Principal approves | New (MVP2) |
 | Failed students at promotion | Principal keeps back or promotes each one | New (MVP2) |
@@ -198,6 +203,7 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 |---|---|---|
 | 1 | Create the branch | Done 2026-11-10 |
 | 2 | Account, leave and discount rules | Done 2026-11-10 (`c66f3c0`) |
+| 2a | Approval loophole: requests only from their own routes; someone other than the requester must approve | Done 2026-11-10 |
 | 3 | Database changes for teacher and student fields, and moving existing records over | Next |
 | 4 | Student creation: admission-number login, first password, forced change, import endpoint with a dry run | |
 | 5 | Teacher registration: app-made ID, subjects | |
@@ -231,8 +237,5 @@ Admin and Super Admin work on the **web**; the phone app is for teachers and stu
 
 ## 8. Open items
 
-- `POST /approval-requests` still lets the caller choose Tier 3 or Tier 4 for every request
-  type except discounts, and self-approval is blocked only for discounts. Fix before step 3:
-  each type sets its own tier and approvers, and self-approval is blocked by default.
 - The first-password pattern can be guessed by classmates; the forced change at first login is
   what keeps it safe, so it must not be skippable.

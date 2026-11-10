@@ -228,6 +228,9 @@ async function main() {
   await expect('teacher cannot raise a general approval request', teacher, 'POST', '/approval-requests', {
     type: 'student.identity-change', entityType: 'student', entityId: studentId, reason: 'Not allowed', payload: { changes: { firstName: 'Changed' } }, tier: 3,
   }, 403);
+  await expect('School Admin cannot lower a Tier 4 change through the general route', admin, 'POST', '/approval-requests', {
+    type: 'student.identity-change', entityType: 'student', entityId: studentId, reason: 'Lower tier', payload: { changes: { firstName: 'Changed' } }, tier: 3,
+  }, 400);
   const teacherStudent = (await expect('teacher can still register a student', teacher, 'POST', '/students', {
     admissionNo: `E2E-T-${RUN}`, nfcId: `nfc-e2e-t-${RUN}`, password: `Stud#${RUN}`, firstName: 'Asha', lastName: 'Rao', dateOfBirth: '2013-06-11',
   }, [201])).data;
@@ -462,7 +465,8 @@ async function main() {
   })).data;
   await expect('cannot assign before approval', admin, 'POST', '/student-fees', { feeStructureId: structure.id }, 409);
   await expect('submit for approval', admin, 'POST', `/fee-structures/${structure.id}/submit-approval`, { reason: 'New year fees' });
-  const approvedStructure = (await expect('approve fee structure', admin, 'POST', `/fee-structures/${structure.id}/approve`, {})).data;
+  await expect('School Admin cannot approve a fee structure', admin, 'POST', `/fee-structures/${structure.id}/approve`, {}, 403);
+  const approvedStructure = (await expect('Principal approves the fee structure', principal, 'POST', `/fee-structures/${structure.id}/approve`, {})).data;
   check('structure approved', approvedStructure?.status === 'APPROVED', approvedStructure?.status);
   await expect('edit after approval is blocked', admin, 'PATCH', `/fee-structures/${structure.id}`, { name: 'Changed' }, 409);
   const assigned = (await expect('assign to the whole class', admin, 'POST', '/student-fees', { feeStructureId: structure.id })).data;
@@ -508,7 +512,8 @@ async function main() {
   const after = feeSummary?.fees?.find((f) => f.id === fee.id);
   check('balance now 4000 and PARTIAL', after?.balance === 4000 && after.status === 'PARTIAL', after);
   await expect('refund request (Tier 3)', admin, 'POST', `/payments/${cheque.id}/refund-request`, { reason: 'Cheque bounced later' });
-  await expect('approve refund', admin, 'POST', `/payments/${cheque.id}/refund`, {});
+  await expect('the requester cannot approve their own refund', admin, 'POST', `/payments/${cheque.id}/refund`, {}, 403);
+  await expect('Principal approves the refund', principal, 'POST', `/payments/${cheque.id}/refund`, {});
   await expect('overdue list', admin, 'GET', '/fees/overdue');
   await expect('fee report', admin, 'GET', `/fees/reports?from=${day(-30)}&to=${day(0)}`);
   await expect('teacher has no fee access', teacher, 'GET', '/student-fees', undefined, 403);
@@ -585,7 +590,8 @@ async function main() {
   const cert = (await expect('create bonafide certificate', admin, 'POST', '/certificates', { studentId, type: 'BONAFIDE', purpose: 'Bank account' })).data;
   await expect('cannot generate before approval', admin, 'POST', `/certificates/${cert.id}/generate`, undefined, 409);
   await expect('submit for approval (Tier 3)', admin, 'POST', `/certificates/${cert.id}/submit-approval`, { reason: 'Parent request' });
-  await expect('approve certificate', admin, 'POST', `/certificates/${cert.id}/approve`, {});
+  await expect('the requester cannot approve their own certificate', admin, 'POST', `/certificates/${cert.id}/approve`, {}, 403);
+  await expect('Principal approves the certificate', principal, 'POST', `/certificates/${cert.id}/approve`, {});
   const issued = (await expect('generate certificate', admin, 'POST', `/certificates/${cert.id}/generate`)).data;
   check('issued with serial number', issued?.status === 'ISSUED' && issued.serialNo, issued);
   await expect('issued certificate is immutable', admin, 'POST', `/certificates/${cert.id}/generate`, undefined, 409);

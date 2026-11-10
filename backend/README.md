@@ -73,8 +73,11 @@ pulling changes; it only adds. Super Admin gets every permission any role has.
 - Only the Principal approves or rejects staff leave; a rejection needs a reason
   (`LeavesService`).
 - A fee discount is always a request; only the Principal approves it, never their own.
-  Request types can fix their approvers and forbid self-approval through
-  `ApprovalDefinition.approverRoles` and `allowSelfApproval` (`ApprovalEngine`).
+  Fee structures are approved only by the Principal too.
+- Approval requests are raised from each module's own route, which sets the tier.
+  `POST /approval-requests` accepts only types registered with `generalRequest: true` (none
+  today). Someone other than the requester must approve, unless the type sets
+  `allowSelfApproval` (section transfers). Types fix their approvers with `approverRoles`.
 - The Parent role and its routes remain, but the agreed plan removes the parent login from
   the apps; the family uses the student's login.
 

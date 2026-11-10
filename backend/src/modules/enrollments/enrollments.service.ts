@@ -31,7 +31,9 @@ export class EnrollmentsService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    // A School Admin or Principal moving a student to another section applies it at once.
     this.approvals.register(TRANSFER, {
+      allowSelfApproval: true,
       onApproved: async (transaction, request, approver) => {
         const target = request.payload as { classId: string; sectionId: string };
         const before = await transaction.enrollment.findUniqueOrThrow({
