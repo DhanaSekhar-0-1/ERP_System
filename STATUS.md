@@ -18,7 +18,7 @@ Related documents:
 Web (apps/web, React + Vite) and Mobile (apps/mobile, React Native + Expo)
   -> NestJS 11 REST API (backend/src, prefix /api/v1, ~350 routes)
   -> Prisma 6 (DatabaseService extends PrismaClient)
-  -> Supabase PostgreSQL (13 migrations, ~70 tables)
+  -> Supabase PostgreSQL (14 migrations, 71 tables)
   -> Supabase Auth (identity) + Supabase Storage (private files, bucket erp-files)
 ```
 
@@ -40,7 +40,7 @@ Shared services in `src/common`:
 
 | Area | Status |
 |---|---|
-| Prisma schema and migrations | Current (13 migrations) |
+| Prisma schema and migrations | Current (14 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
 | End-to-end suite | 480/480 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
@@ -101,6 +101,14 @@ then hiding the parent login and unused modules, hosting, and a device test. Alo
 2. A separate client database and hosting for the one-month pilot.
 3. Try real cards on an NFC phone.
 4. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+
+Done 2026-11-10: MVP1 database fields (migration `20261110100000_mvp1_registration_fields`):
+student gender, admission date and type, blood group, mother tongue, PIN code, Aadhaar stored
+encrypted with last 4 digits and a duplicate-blocking hash, Aadhaar enrolment slip number,
+previous school details; teacher joining date, gender, date of birth, address and subjects
+taught; a forced first-password change flag on users; and per-school ID counters for the
+Teacher ID. Existing students are marked as already studying here. The API does not use the
+new fields yet (MVP1 step 4).
 
 Done 2026-11-10: the MVP plan was agreed ([docs/mvp-plan.md](./docs/mvp-plan.md)). Super Admin
 got full access; only a Super Admin creates or changes Principal, School Admin and Accountant

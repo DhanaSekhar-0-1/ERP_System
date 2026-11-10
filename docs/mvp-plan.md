@@ -204,14 +204,23 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 1 | Create the branch | Done 2026-11-10 |
 | 2 | Account, leave and discount rules | Done 2026-11-10 (`c66f3c0`) |
 | 2a | Approval loophole: requests only from their own routes; someone other than the requester must approve | Done 2026-11-10 |
-| 3 | Database changes for teacher and student fields, and moving existing records over | Next |
-| 4 | Student creation: admission-number login, first password, forced change, import endpoint with a dry run | |
+| 3 | Database changes for teacher and student fields, and moving existing records over | Done 2026-11-10 (migration `20261110100000_mvp1_registration_fields`) |
+| 4 | Student creation: admission-number login, first password, forced change, import endpoint with a dry run | Next |
 | 5 | Teacher registration: app-made ID, subjects | |
 | 6 | Teacher check-in and the Admin attendance dashboard | |
 | 7 | Leave screens on web and phone | |
 | 8 | Hide parent login and unused modules; host; Android build; device test | |
 
 Admin and Super Admin work on the **web**; the phone app is for teachers and students.
+
+**How the data is stored (step 3):** the parent is the existing Guardian record linked to the
+student as primary guardian (name, mobile, relation), so brothers and sisters can share one
+parent later. The family name is the existing `lastName`. Aadhaar is never stored in plain
+text: an encrypted value, the last 4 digits for display, and a keyed hash that blocks the same
+number twice in a school. The Teacher ID is written to the existing `employee_no`, so older
+staff keep their numbers; a per-school counter (`id_sequences`) makes the next one. New fields
+are optional in the database because existing records lack them; the API enforces what is
+required.
 
 ## 6. Excel import
 

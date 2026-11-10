@@ -15,6 +15,18 @@ enum UserStatus {
   ARCHIVED
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+/// Whether a student joined from another school or was already studying here when added.
+enum AdmissionType {
+  NEW_TO_SCHOOL
+  EXISTING
+}
+
 enum EnrollmentStatus {
   ACTIVE
   PROMOTED
@@ -268,6 +280,7 @@ model School {
   assets              Asset[]
   syncBatches         SyncBatch[]
   securityEvents      SecurityEvent[]
+  idSequences         IdSequence[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -326,6 +339,8 @@ model User {
   displayName            String                  @map("display_name")
   phone                  String?
   status                 UserStatus              @default(INVITED)
+  /// Set when the account has a generated first password; cleared once the user changes it.
+  mustChangePassword     Boolean                 @default(false) @map("must_change_password")
   createdAt              DateTime                @default(now()) @map("created_at")
   updatedAt              DateTime                @updatedAt @map("updated_at")
   organization           Organization?           @relation(fields: [organizationId], references: [id])
@@ -521,6 +536,23 @@ model Student {
   dateOfBirth          DateTime?             @map("date_of_birth") @db.Date
   phone                String?
   address              String?
+  gender               Gender?
+  admissionDate        DateTime?             @map("admission_date") @db.Date
+  admissionType        AdmissionType?        @map("admission_type")
+  bloodGroup           String?               @map("blood_group")
+  motherTongue         String?               @map("mother_tongue")
+  pinCode              String?               @map("pin_code")
+  /// Aadhaar is never stored in plain text: encrypted value, last 4 digits for display, and a
+  /// keyed hash so the same number cannot be registered twice in a school.
+  aadhaarEncrypted     String?               @map("aadhaar_encrypted")
+  aadhaarLast4         String?               @map("aadhaar_last4")
+  aadhaarHash          String?               @map("aadhaar_hash")
+  /// Used instead of Aadhaar when it has been applied for but not issued yet.
+  aadhaarEnrolmentNo   String?               @map("aadhaar_enrolment_no")
+  previousSchool       String?               @map("previous_school")
+  lastClassPassed      String?               @map("last_class_passed")
+  previousPercentage   Decimal?              @map("previous_percentage") @db.Decimal(5, 2)
+  previousTcNumber     String?               @map("previous_tc_number")
   isArchived           Boolean               @default(false) @map("is_archived")
   createdAt            DateTime              @default(now()) @map("created_at")
   updatedAt            DateTime              @default(now()) @updatedAt @map("updated_at")
@@ -538,6 +570,7 @@ model Student {
   libraryIssues        LibraryIssue[]
 
   @@unique([schoolId, admissionNo])
+  @@unique([schoolId, aadhaarHash])
   @@index([schoolId])
   @@map("students")
 }
@@ -576,9 +609,17 @@ model StaffProfile {
   id                 String              @id @default(uuid()) @db.Uuid
   userId             String              @unique @map("user_id") @db.Uuid
   schoolId           String              @map("school_id") @db.Uuid
+  /// For teachers registered from MVP1 on, the app-made Teacher ID (e.g. T26A05), also the login ID.
   employeeNo         String              @map("employee_no")
   nfcId              String?             @unique @map("nfc_id")
+  /// Kept for staff registered before MVP1; new teachers use teachingSubjects instead.
   designation        String?
+  joiningDate        DateTime?           @map("joining_date") @db.Date
+  gender             Gender?
+  dateOfBirth        DateTime?           @map("date_of_birth") @db.Date
+  address            String?
+  /// Subjects the teacher can teach, in order; the first is the main subject.
+  teachingSubjects   String[]            @default([]) @map("teaching_subjects")
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @default(now()) @updatedAt @map("updated_at")
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -947,6 +988,7 @@ model Mark {
 
   @@unique([assessmentId, studentId])
   @@index([schoolId, studentId])
+  @@index([studentId, releasedAt])
   @@map("marks")
 }
 
@@ -1571,4 +1613,17 @@ model SyncConflict {
 
   @@index([schoolId, status])
   @@map("sync_conflicts")
+}
+
+/// Running counters per school, used to make IDs such as the Teacher ID (T26A05) safely when
+/// two people register at the same time. `kind` names the counter, e.g. "teacher".
+model IdSequence {
+  schoolId  String   @map("school_id") @db.Uuid
+  kind      String
+  lastValue Int      @default(0) @map("last_value")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  school    School   @relation(fields: [schoolId], references: [id])
+
+  @@id([schoolId, kind])
+  @@map("id_sequences")
 }
