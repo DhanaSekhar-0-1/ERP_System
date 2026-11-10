@@ -18,6 +18,8 @@ export interface UserContext {
   staffId: string | null;
   studentId: string | null;
   guardianId: string | null;
+  /** Still on a generated first password: the apps show only the choose-a-new-password screen. */
+  mustChangePassword: boolean;
 }
 
 export interface StudentName {
@@ -179,12 +181,28 @@ export interface Subject {
   code: string | null;
 }
 
+export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
+
 export interface Staff {
   id: string;
+  /** For teachers registered from MVP1 on, the app-made Teacher ID (e.g. T26A05). */
   employeeNo: string;
+  /** Older staff only; newer teachers have teachingSubjects instead. */
   designation: string | null;
   nfcId: string | null;
+  joiningDate: string | null;
+  gender: Gender | null;
+  /** Subjects the teacher can teach; the first is the main one. */
+  teachingSubjects: string[];
   user: { id: string; email: string; displayName: string; phone: string | null; status: string };
+}
+
+/** Returned once when a teacher is registered: the login and the first password to hand over. */
+export interface RegisteredTeacher extends Staff {
+  teacherId: string;
+  loginId: string;
+  firstPassword: string;
+  mustChangePassword: boolean;
 }
 
 export interface StaffAssignment {

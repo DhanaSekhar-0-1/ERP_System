@@ -1,10 +1,11 @@
 # School ERP Project Status
 
 Single source of truth for what is built, what is partial, and what is known
-to be missing. Last updated 2026-11-09.
+to be missing. Last updated 2026-11-10.
 
 Related documents:
 
+- [docs/mvp-plan.md](./docs/mvp-plan.md) - **agreed plan for the first school**: roles, approvals, MVP1/2/3 and the MVP1 build order
 - [school-erp-architecture.md](./school-erp-architecture.md) - product design, RBAC, sensitivity tiers, roadmap
 - [recommended-techstack.md](./recommended-techstack.md) - chosen technology stack
 - [API's_modules.md](./API's_modules.md) - target API catalog and sprint order
@@ -17,7 +18,7 @@ Related documents:
 Web (apps/web, React + Vite) and Mobile (apps/mobile, React Native + Expo)
   -> NestJS 11 REST API (backend/src, prefix /api/v1, ~350 routes)
   -> Prisma 6 (DatabaseService extends PrismaClient)
-  -> Supabase PostgreSQL (13 migrations, ~70 tables)
+  -> Supabase PostgreSQL (14 migrations, 71 tables)
   -> Supabase Auth (identity) + Supabase Storage (private files, bucket erp-files)
 ```
 
@@ -39,9 +40,9 @@ Shared services in `src/common`:
 
 | Area | Status |
 |---|---|
-| Prisma schema and migrations | Current (13 migrations) |
+| Prisma schema and migrations | Current (14 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 462/462 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 555/555 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
@@ -57,20 +58,20 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 | Module | Status | Notes |
 |---|---|---|
 | Authentication and sessions | Done | Login by email/student ID/staff ID, refresh, logout, forgot/reset/change password, OTP, session list and revoke, MFA endpoints, lockout after 5 failures in 15 min |
-| Organizations, schools, settings | Done | Super Admin limited to own organization; archived schools blocked. Super Admin has full access (every permission any role has, applied by `npm run prisma:seed`) and can fill any approval slot, though Tier 4 still needs a second person |
-| Users, roles, permissions | Done | Permission overrides, email sync to Supabase, built-in roles cannot be renamed |
+| Organizations, schools, settings | Done | Super Admin limited to own organization; archived schools blocked. Super Admin has full access (every permission any role has, applied by `npm run prisma:seed`) except that it cannot approve fee discounts, decide staff leave, or give the Principal's Tier 4 approval |
+| Users, roles, permissions | Done | Permission overrides, email sync to Supabase, built-in roles cannot be renamed. Only a Super Admin creates, gives or changes Super Admin, School Admin, Principal and Accountant accounts |
 | Academic years | Done | Activate, close, rollover (copy structure, optional promotion), summary |
 | Classes, sections, subjects | Done | A new class gets Section A; every new section gets its own copy of the school's default subjects (Sanskrit optional and off). Subjects are per section, so renaming or switching one off affects that section only. Delete is refused while students, exams, homework, fees or timetables depend on it; a class keeps at least one section. Web: Classes & Sections with Sections, Subjects, Teacher assignments and Students tabs, and Settings for the default subjects |
 | Staff and assignments | Done | One teacher per section subject and one class teacher per section (own table). A section subject can be assigned only in its own section while switched on. Teacher access is read from current assignments on every request, so removing one revokes it at once. Web: Teacher Assignments page |
-| Students | Done | Scoped reads, Tier 4 identity changes, archive/restore, history, documents |
+| Students | Done | Registration by School Admin or Super Admin only, straight into a section with the next roll number and the parent as primary guardian; admission number is the login, first password made from family name and parent mobile and changed at first login; Aadhaar encrypted (AES-256-GCM, `PII_ENCRYPTION_KEY`), shown masked, full only to the student and Accountant; Excel import with a dry run (`POST /students/import`); scoped reads, Tier 4 identity changes, archive/restore, history, documents |
 | Guardians and parents | Done | Parent logins, children links, `/me` routes, Tier 1 contact edits |
 | Enrollments | Done | Transfer (Tier 3), promote, withdraw |
 | Attendance | Done | Daily attendance is marked by the section's class teacher or school leadership; subject teachers can view it. ON_LEAVE status, bulk, 48-hour Tier 2 edits, Tier 3 corrections, summary, CSV export |
 | Homework | Done | Section-aware assignment check, grading, return, late flag, archive |
 | Announcements | Done | Audience targeting applied on read; publish notifies the audience |
 | Examinations and marks | Done | Exam types FA1-FA4 (minor), Q1 Quarterly, Q2 Half-yearly, Q3 Annual (major), Pre-public (Class 10 only), slip tests, and Other. Teachers submit marks; each section is approved by the School Admin once its marks are complete and released by the Principal, independently of other sections (bulk approve-ready and release-approved too). Released marks and report cards show to that section's students, parents and teachers at once; the exam is marked released when every section is. Teachers create slip tests for their own sections, and the School Admin's approval releases them. Tier 3/4 corrections, report cards |
-| Fees and payments | Done | Structure approval, discounts and refunds (Tier 3), receipts, gateway orders, signed idempotent webhooks |
-| Leave | Done | Student leave marks ON_LEAVE; staff leave checks balance and opens substitute requests |
+| Fees and payments | Done | Structure approval, refunds (Tier 3), discounts (always a request; only the Principal approves, never their own), receipts, gateway orders, signed idempotent webhooks |
+| Leave | Done | Student leave marks ON_LEAVE; staff leave checks balance, is decided only by the Principal (reason needed to reject), and opens substitute requests |
 | Timetable and substitutes | Done | Rule-based conflict engine, draft generator, available-teacher ranking |
 | Feedback and complaints | Done | Leader-only routing, anonymity, SLA auto-escalation, repeated-complaint alert |
 | Notifications | Done | Inbox, preferences, devices, templates, delivery log; delivery worker with FCM/Twilio/Resend senders, retries with backoff, retry/process admin routes. FCM (push), Twilio (SMS) and Resend (email) are **not verified** against the real services |
@@ -90,11 +91,63 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 
 ## 5. Next steps
 
+MVP1 is being built on branch `feature/mvp1`, in the order set in
+[docs/mvp-plan.md](./docs/mvp-plan.md#5-mvp1-build-order): database changes for the new teacher
+and student fields, student creation with admission-number login and Excel import, teacher
+registration with app-made IDs, teacher check-in and the attendance dashboard, leave screens,
+then hiding the parent login and unused modules, hosting, and a device test. Alongside it:
+
 1. Change the test passwords that are readable in the repository history.
-2. Fix the approval-tier gap (`POST /approval-requests` takes the tier from the caller) and build the account hierarchy (Principal creates School Admins and Accountants).
-3. School Admin screens for student registration, enrollment and academic years; then homework, fees and timetables.
-4. Test the phone app by hand on real data, try real cards on an NFC phone, and host the backend for the school demo.
-5. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+2. A separate client database and hosting for the one-month pilot.
+3. Try real cards on an NFC phone.
+4. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+
+Done 2026-11-10: "Choose your own password" screen in the web and phone apps (step 5a). After a
+sign-in with a first password the app shows only this screen until the password is changed,
+then continues to the person's normal screens. The same rules on both (at least 8 characters,
+a letter and a number, different from the first password, typed twice) come from
+`newPasswordProblem` in `packages/shared`. Checked in the browser on web (teacher T26A24) and in
+the phone app's web preview (teacher T26A25).
+
+Done 2026-11-10: MVP1 teacher registration (step 5). `POST /staff` takes the MVP1 form, makes
+the Teacher ID (T26A05) from the school's counter and a random first password shown once, and
+checks subjects against the school's list; teachers sign in with the Teacher ID (or email). Web
+Teachers page dialog rebuilt and checked in the browser (registered T26A23). Login screens now
+say "Admission number, Teacher ID or email". The "choose a new password" screen
+followed the same day (below).
+
+Done 2026-11-10: stricter registration checks after testing with 8 correct and 44 wrong or
+manipulated rows: names in English letters only, no impossible dates, 14-digit minimum for
+slip numbers (catches a mistyped Aadhaar), length limits on the import path, no markup or
+leading formula characters in free text, formula-safe logins CSV, and both rows named for
+duplicates in a file.
+
+Done 2026-11-10: Excel import script, `npm run import:students` (template, dry run with
+sheet row numbers, commit with a logins CSV). Tested end to end against the local API: date
+and number cells, blank lines, example rows left in, a blocked commit, re-runs skipping
+students already imported, and a sign-in with a printed first password.
+
+Done 2026-11-10: MVP1 student registration (step 4). `POST /students` takes the agreed form;
+`POST /students/import` checks or imports Excel rows; students sign in with the admission
+number; a generated first password must be changed before any other route works;
+`GET /students/:id/aadhaar` shows the full number to the student or Accountant only, logged.
+Per-school switches `registration.requireAadhaar` and `registration.requireNfcCard` in school
+settings metadata (both on by default) let a pilot run without them.
+
+Done 2026-11-10: MVP1 database fields (migration `20261110100000_mvp1_registration_fields`):
+student gender, admission date and type, blood group, mother tongue, PIN code, Aadhaar stored
+encrypted with last 4 digits and a duplicate-blocking hash, Aadhaar enrolment slip number,
+previous school details; teacher joining date, gender, date of birth, address and subjects
+taught; a forced first-password change flag on users; and per-school ID counters for the
+Teacher ID. Existing students are marked as already studying here. The API does not use the
+new fields yet (MVP1 step 4).
+
+Done 2026-11-10: the MVP plan was agreed ([docs/mvp-plan.md](./docs/mvp-plan.md)). Super Admin
+got full access; only a Super Admin creates or changes Principal, School Admin and Accountant
+accounts; only the Principal decides staff leave (a rejection needs a reason) and approves fee
+discounts and fee structures. Approval requests can be raised only from their own routes (the
+general route can no longer lower a Tier 4 change to Tier 3), and someone other than the
+requester must approve, except a leader's section transfer.
 
 Done 2026-11-09: class, section, subject and teacher assignment management; per-section exam
 approval and release; multi-class exams; teacher web area; local sign-in checks and a short

@@ -9,6 +9,7 @@ import { ClassesPage } from './pages/ClassesPage';
 import { ExamsPage } from './pages/ExamsPage';
 import { LoginPage } from './pages/LoginPage';
 import { MobileOnlyPage } from './pages/MobileOnlyPage';
+import { NewPasswordPage } from './pages/NewPasswordPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StudentsPage } from './pages/StudentsPage';
@@ -34,6 +35,8 @@ export function App() {
     );
   }
   if (!user) return <LoginPage />;
+  // Still on the first password from the school: nothing else works until it is changed.
+  if (user.mustChangePassword) return <NewPasswordPage />;
 
   if (user.roles.some((role) => LEADER_ROLES.includes(role))) {
     return (

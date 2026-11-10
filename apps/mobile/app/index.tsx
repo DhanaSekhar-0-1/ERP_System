@@ -14,6 +14,8 @@ export default function Index() {
     );
   }
   if (!user) return <Redirect href="/login" />;
+  // Still on the first password from the school: nothing else works until it is changed.
+  if (user.mustChangePassword) return <Redirect href="/new-password" />;
   if (user.studentId || user.guardianId) return <Redirect href="/family" />;
   return <Redirect href="/staff" />;
 }

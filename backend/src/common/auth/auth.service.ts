@@ -13,6 +13,8 @@ export interface ErpUserProfile {
   status: string;
   organizationId: string | null;
   schoolId: string | null;
+  /** Still on a generated first password: the app must ask for a new one first. */
+  mustChangePassword: boolean;
 }
 
 @Injectable()
@@ -61,6 +63,7 @@ export class AuthService {
     status: string;
     organizationId: string | null;
     schoolId: string | null;
+    mustChangePassword: boolean;
   }): ErpUserProfile {
     return {
       id: user.id,
@@ -68,6 +71,7 @@ export class AuthService {
       email: user.email,
       displayName: user.displayName,
       status: user.status,
+      mustChangePassword: user.mustChangePassword,
       organizationId: user.organizationId,
       schoolId: user.schoolId,
     };

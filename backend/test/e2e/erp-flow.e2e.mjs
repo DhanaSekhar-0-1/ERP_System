@@ -23,6 +23,19 @@ let section = '';
 
 // ---------- helpers ----------
 
+// Verhoeff tables, to make Aadhaar-shaped test numbers that pass the real checksum.
+const VD = [[0,1,2,3,4,5,6,7,8,9],[1,2,3,4,0,6,7,8,9,5],[2,3,4,0,1,7,8,9,5,6],[3,4,0,1,2,8,9,5,6,7],[4,0,1,2,3,9,5,6,7,8],[5,9,8,7,6,0,4,3,2,1],[6,5,9,8,7,1,0,4,3,2],[7,6,5,9,8,2,1,0,4,3],[8,7,6,5,9,3,2,1,0,4],[9,8,7,6,5,4,3,2,1,0]];
+const VP = [[0,1,2,3,4,5,6,7,8,9],[1,5,7,6,2,8,3,0,9,4],[5,8,0,3,7,9,6,1,4,2],[8,9,1,6,0,4,3,5,2,7],[9,4,5,3,1,2,6,8,7,0],[4,2,8,6,5,7,3,9,0,1],[2,7,9,3,8,0,6,4,1,5],[7,0,4,6,9,1,3,2,5,8]];
+const VINV = [0,4,3,2,1,5,6,7,8,9];
+/** A random 12-digit number with a valid Aadhaar check digit (not a real person's). */
+function testAadhaar() {
+  let body = String(2 + Math.floor(Math.random() * 8));
+  while (body.length < 11) body += String(Math.floor(Math.random() * 10));
+  let c = 0;
+  [...body].reverse().forEach((d, i) => { c = VD[c][VP[(i + 1) % 8][Number(d)]]; });
+  return body + VINV[c];
+}
+
 function credentials() {
   const file = process.env.CREDENTIALS_FILE ?? resolve(process.cwd(), '..', 'test-org-school.txt');
   const text = readFileSync(file, 'utf8');
@@ -211,13 +224,143 @@ async function main() {
       academicYearId: year.id, classId: cls.id, sectionId: secA.id, rollNumber: '1',
     })).data;
   }
-  const newStudent = (await expect('teacher registers a second student', teacher, 'POST', '/students', {
-    admissionNo: `E2E-${RUN}`, nfcId: `NFC-E2E-${RUN}`, password: `Stud#${RUN}`, firstName: 'Ravi', lastName: 'Kumar', dateOfBirth: '2013-05-10',
-  })).data;
-  check('generated login id returned', newStudent?.loginId === newStudent?.id, newStudent);
-  const enrollment2 = (await expect('enroll second student in 8-B', admin, 'POST', '/enrollments', {
-    academicYearId: year.id, studentId: newStudent.id, classId: cls.id, sectionId: secB.id, rollNumber: '2',
-  })).data;
+  const aadhaar2 = testAadhaar();
+  const mobile2 = `98${RUN.slice(-8)}`;
+  const registration = {
+    admissionNo: `E2E-${RUN}`, admissionDate: '2026-09-02', admissionType: 'NEW_TO_SCHOOL', sectionId: secB.id,
+    firstName: 'Ravi', familyName: 'Kumar', gender: 'MALE', dateOfBirth: '2013-05-10',
+    parentName: 'Suresh Kumar', parentRelation: 'Father', parentMobile: `+91 ${mobile2.slice(0, 5)} ${mobile2.slice(5)}`,
+    aadhaarNumber: aadhaar2, nfcId: `nfc-e2e-${RUN}`,
+    previousSchool: 'ZPHS Tenali', lastClassPassed: 'Class 7', previousPercentage: 82.5,
+  };
+  await expect('teacher cannot register a student', teacher, 'POST', '/students', registration, 403);
+  await expect('new-to-school student needs previous school details', admin, 'POST', '/students', { ...registration, previousSchool: undefined, previousPercentage: undefined }, 400);
+  await expect('an invalid Aadhaar number is refused', admin, 'POST', '/students', { ...registration, aadhaarNumber: '234567890123' }, 400);
+  await expect('a 9-digit parent mobile is refused', admin, 'POST', '/students', { ...registration, parentMobile: '944012345' }, 400);
+  const newStudent = (await expect('School Admin registers a student into 8-B', admin, 'POST', '/students', registration, 201)).data;
+  check('login ID is the admission number', newStudent?.loginId === `E2E-${RUN}`, newStudent?.loginId);
+  check('first password is family name + @ + last 4 of mobile', newStudent?.firstPassword === `Kuma@${mobile2.slice(-4)}`, newStudent?.firstPassword);
+  check('student is put in 8-B with the next roll number', newStudent?.enrollment?.sectionId === secB.id && newStudent?.enrollment?.rollNumber === '1', newStudent?.enrollment);
+  check('card ID typed in lowercase is saved in uppercase', newStudent?.nfcId === `NFC-E2E-${RUN}`, newStudent?.nfcId);
+  check('Aadhaar comes back masked only', newStudent?.aadhaarMasked === `XXXX XXXX ${aadhaar2.slice(-4)}` && !('aadhaarEncrypted' in (newStudent ?? {})) && !('aadhaarHash' in (newStudent ?? {})), newStudent);
+  check('first password must be changed', newStudent?.mustChangePassword === true);
+  const enrollment2 = newStudent.enrollment;
+  await expect('the same admission number is refused', admin, 'POST', '/students', { ...registration, aadhaarNumber: testAadhaar(), nfcId: `NFC-E2E-X-${RUN}` }, 409);
+  await expect('the same Aadhaar under another admission number is refused', admin, 'POST', '/students', { ...registration, admissionNo: `E2E-A-${RUN}`, nfcId: `NFC-E2E-Y-${RUN}` }, 400);
+  await expect('the same card in a different case is refused', admin, 'POST', '/students', { ...registration, admissionNo: `E2E-D-${RUN}`, aadhaarNumber: testAadhaar(), nfcId: `NFC-E2E-${RUN}` }, 400);
+  const adminView = (await expect('admin opens the new student', admin, 'GET', `/students/${newStudent.id}`)).data;
+  check('admin sees Aadhaar masked, not stored values', adminView?.aadhaarMasked?.endsWith(aadhaar2.slice(-4)) && !('aadhaarEncrypted' in (adminView ?? {})) && !('aadhaarHash' in (adminView ?? {})), adminView);
+  check('parent saved as primary guardian', adminView?.guardians?.some((g) => g.isPrimary && g.guardian.phone === mobile2 && g.guardian.name === 'Suresh Kumar'), adminView?.guardians);
+  await expect('School Admin cannot see the full Aadhaar', admin, 'GET', `/students/${newStudent.id}/aadhaar`, undefined, 403);
+
+  heading('First login with the admission number');
+  const firstLogin = await call(null, 'POST', '/auth/login', { identifier: `e2e-${RUN}`, password: newStudent.firstPassword });
+  check('student signs in with admission number (any case) and first password', firstLogin.status === 201 && firstLogin.data?.mustChangePassword === true, firstLogin.status);
+  const fresh = firstLogin.data?.session?.access_token;
+  await expect('other routes are blocked until the password changes', fresh, 'GET', '/students', undefined, 403);
+  const freshMe = (await expect('who am I still works', fresh, 'GET', '/auth/me')).data?.erpUser;
+  check('/auth/me says the password must change', freshMe?.mustChangePassword === true, freshMe);
+  await expect('the new password must differ', fresh, 'POST', '/auth/change-password', { currentPassword: newStudent.firstPassword, newPassword: newStudent.firstPassword }, 400);
+  await expect('student sets a new password', fresh, 'POST', '/auth/change-password', { currentPassword: newStudent.firstPassword, newPassword: `Ravi#${RUN}` });
+  const relogin = await call(null, 'POST', '/auth/login', { identifier: `E2E-${RUN}`, password: `Ravi#${RUN}` });
+  check('signs in with the new password, no change needed', relogin.status === 201 && relogin.data?.mustChangePassword === false, relogin.status);
+  const ravi = relogin.data?.session?.access_token;
+  const raviList = (await expect('after the change, the student can use the app', ravi, 'GET', '/students')).data;
+  check('and sees only themself', raviList?.length === 1 && raviList[0].id === newStudent.id, raviList?.length);
+  const ownAadhaar = (await expect('the student sees their own full Aadhaar', ravi, 'GET', `/students/${newStudent.id}/aadhaar`)).data;
+  check('full Aadhaar matches what was registered', ownAadhaar?.aadhaar === aadhaar2, ownAadhaar);
+  await expect('the first password no longer works', null, 'POST', '/auth/login', { identifier: `E2E-${RUN}`, password: newStudent.firstPassword }, 401);
+
+  heading('Excel import');
+  // Its own class, so imported students do not join the Class 8 exams tested later.
+  await expect('create a class for the import', admin, 'POST', '/classes', { academicYearId: year.id, name: 'Class 6', sortOrder: 6 });
+  const importRow = (overrides) => ({
+    admission_no: `E2E-I1-${RUN}`, admission_date: '02/09/2026', admission_type: 'Existing',
+    first_name: 'Asha', family_name: 'Rao', gender: 'F', date_of_birth: '11/06/2013',
+    class: '6', section: 'a', parent_name: 'Lakshmi Rao', parent_mobile: `97${RUN.slice(-8)}`,
+    aadhaar_or_enrolment_no: testAadhaar(), nfc_card_id: `NFC-I1-${RUN}`, ...overrides,
+  });
+  const goodRow = importRow({});
+  const sheet = [
+    goodRow,
+    importRow({ admission_no: `E2E-I2-${RUN}`, parent_mobile: '12345', nfc_card_id: `NFC-I2-${RUN}`, aadhaar_or_enrolment_no: testAadhaar() }),
+    importRow({ nfc_card_id: `NFC-I3-${RUN}`, aadhaar_or_enrolment_no: testAadhaar() }),
+    importRow({ admission_no: `E2E-${RUN}`, nfc_card_id: `NFC-E2E-${RUN}` }),
+  ];
+  await expect('teacher cannot import students', teacher, 'POST', '/students/import', { dryRun: true, rows: sheet }, 403);
+  const dry = (await expect('dry run checks every row', admin, 'POST', '/students/import', { dryRun: true, rows: sheet }, 201)).data;
+  check('dry run saves nothing and lists the problem rows', dry?.imported === 0 && dry?.readyToImport === 1 && dry?.problems?.length === 2, dry);
+  check('problems name the row and the reason', dry?.problems?.some((p) => p.row === 3 && p.errors.some((e) => e.includes('mobile'))) && dry?.problems?.some((p) => p.row === 4 && p.errors.some((e) => e.includes('twice'))), dry?.problems);
+  check('an already registered admission number is skipped, not a problem', dry?.alreadyRegistered?.some((r) => r.row === 5), dry?.alreadyRegistered);
+  // Weaknesses found with a 44-row test sheet; each row must be refused with the right reason.
+  const hostile = [
+    ['an Aadhaar with a digit missing', { aadhaar_or_enrolment_no: testAadhaar().slice(0, 11) }, 'needs exactly 12'],
+    ['31 February', { date_of_birth: '31/02/2015' }, 'date of birth is missing or not a date'],
+    ['a script tag as a name', { first_name: '<script>alert(1)</script>' }, 'first name can only contain'],
+    ['SQL text as a name', { first_name: "Robert'); DROP TABLE students;--" }, 'first name can only contain'],
+    ['a formula as a name', { first_name: '=HYPERLINK("http://x","y")' }, 'first name can only contain'],
+    ['a 500-character name', { first_name: 'A'.repeat(500) }, 'longer than 80'],
+    ['a 5000-character address', { address: 'B'.repeat(5000) }, 'address is longer than 300'],
+    ['a 90-character admission number', { admission_no: `E2E-${'9'.repeat(86)}` }, 'admission number is longer than 40'],
+    ['a family name in Telugu script', { family_name: 'సాయి' }, 'family name must be written in English letters'],
+    ['an address starting with =', { address: '=1+1' }, 'cannot start with ='],
+  ];
+  const hostileRows = hostile.map(([, over], i) => importRow({ admission_no: `E2E-H${i}-${RUN}`, nfc_card_id: `NFC-H${i}-${RUN}`, aadhaar_or_enrolment_no: testAadhaar(), ...over }));
+  const hostileDry = (await expect('dry run of wrong and manipulated rows', admin, 'POST', '/students/import', { dryRun: true, rows: hostileRows }, 201)).data;
+  hostile.forEach(([name, , reason], i) => {
+    const problem = hostileDry?.problems?.find((x) => x.row === i + 2);
+    check(`refused: ${name}`, problem?.errors?.some((e) => e.includes(reason)), problem?.errors);
+  });
+  check('none of the manipulated rows is ready to import', hostileDry?.readyToImport === 0, hostileDry?.readyToImport);
+  const blocked = (await expect('a real run with problems saves nothing', admin, 'POST', '/students/import', { dryRun: false, rows: sheet }, 201)).data;
+  check('nothing imported while any row has a problem', blocked?.imported === 0 && blocked?.problems?.length === 2, blocked);
+  const imported = (await expect('import the clean sheet', admin, 'POST', '/students/import', { dryRun: false, rows: [goodRow, sheet[3]] }, 201)).data;
+  check('one student imported with a login, one skipped', imported?.imported === 1 && imported?.logins?.[0]?.firstPassword === `Rao@${goodRow.parent_mobile.slice(-4)}` && imported?.alreadyRegistered?.length === 1, imported);
+  check('imported student is in 6-A', imported?.logins?.[0]?.section === 'Class 6-A', imported?.logins);
+  const rerun = (await expect('running the same sheet again', admin, 'POST', '/students/import', { dryRun: false, rows: [goodRow] }, 201)).data;
+  check('re-running skips students already imported', rerun?.imported === 0 && rerun?.alreadyRegistered?.length === 1 && rerun?.problems?.length === 0, rerun);
+
+  heading('Teacher registration');
+  const subjectOptions = (await expect('list subjects a teacher can teach', admin, 'GET', '/staff/teaching-subjects')).data;
+  check('the subject list includes Mathematics', subjectOptions?.includes('Mathematics'), subjectOptions);
+  const teacherForm = {
+    displayName: 'Lakshmi Prasanna K', phone: `+91 96${RUN.slice(-8)}`, joiningDate: '2026-06-12',
+    teachingSubjects: ['mathematics', 'Physics', 'Mathematics'], gender: 'FEMALE', dateOfBirth: '1991-06-14',
+    nfcId: `nfc-tch-${RUN}`, address: '4-12, Gandhi Nagar, Vijayawada',
+  };
+  await expect('a teacher cannot register teachers', teacher, 'POST', '/staff', teacherForm, 403);
+  await expect('an unknown subject is refused', admin, 'POST', '/staff', { ...teacherForm, teachingSubjects: ['Maths'] }, 400);
+  await expect('a bad mobile is refused', admin, 'POST', '/staff', { ...teacherForm, phone: '12345' }, 400);
+  await expect('a name in Telugu script is refused', admin, 'POST', '/staff', { ...teacherForm, displayName: 'లక్ష్మి' }, 400);
+  await expect('a joining date that does not exist is refused', admin, 'POST', '/staff', { ...teacherForm, joiningDate: '2026-02-30' }, 400);
+  await expect('a card already given to a student is refused', admin, 'POST', '/staff', { ...teacherForm, nfcId: `NFC-E2E-${RUN}` }, 400);
+  const lakshmi = (await expect('School Admin registers a teacher', admin, 'POST', '/staff', teacherForm, 201)).data;
+  check('Teacher ID is T + joining year + count', /^T26[A-Z]\d{2}$/.test(lakshmi?.teacherId ?? ''), lakshmi?.teacherId);
+  check('the Teacher ID is the login ID', lakshmi?.loginId === lakshmi?.teacherId && lakshmi?.employeeNo === lakshmi?.teacherId);
+  check('a random first password is returned once', /^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/.test(lakshmi?.firstPassword ?? ''), lakshmi?.firstPassword);
+  check('subjects saved with the school spelling, main first, no repeats', JSON.stringify(lakshmi?.teachingSubjects) === JSON.stringify(['Mathematics', 'Physics']), lakshmi?.teachingSubjects);
+  check('card saved in capitals and joining date kept', lakshmi?.nfcId === `NFC-TCH-${RUN}` && lakshmi?.joiningDate?.startsWith('2026-06-12'), lakshmi);
+  check('no email given, so a private login email is used', lakshmi?.user?.email?.endsWith('@staff.erp.local'), lakshmi?.user?.email);
+  const raviT = (await expect('register a second teacher', admin, 'POST', '/staff', {
+    displayName: "Ravi D'Souza", phone: `95${RUN.slice(-8)}`, joiningDate: '2027-01-05', teachingSubjects: ['English'], email: `ravi.${RUN}@school.example`,
+  }, 201)).data;
+  const idNumber = (id) => (id.charCodeAt(3) - 65) * 99 + Number(id.slice(4));
+  check('the next teacher gets the next number and their own joining year', raviT?.teacherId?.startsWith('T27') && idNumber(raviT.teacherId) === idNumber(lakshmi.teacherId) + 1, [lakshmi?.teacherId, raviT?.teacherId]);
+  await expect('the same email cannot be used twice', admin, 'POST', '/staff', { ...teacherForm, nfcId: undefined, email: `ravi.${RUN}@school.example` }, 400);
+
+  const teacherLogin = await call(null, 'POST', '/auth/login', { identifier: lakshmi.teacherId.toLowerCase(), password: lakshmi.firstPassword });
+  check('teacher signs in with the Teacher ID and first password', teacherLogin.status === 201 && teacherLogin.data?.mustChangePassword === true, teacherLogin.status);
+  const lakshmiFirst = teacherLogin.data?.session?.access_token;
+  await expect('the teacher must change the password first', lakshmiFirst, 'GET', '/staff-assignments', undefined, 403);
+  await expect('teacher sets a new password', lakshmiFirst, 'POST', '/auth/change-password', { currentPassword: lakshmi.firstPassword, newPassword: `Lakshmi#${RUN}` });
+  const lakshmiAgain = await call(null, 'POST', '/auth/login', { identifier: lakshmi.teacherId, password: `Lakshmi#${RUN}` });
+  check('then signs in normally', lakshmiAgain.status === 201 && lakshmiAgain.data?.mustChangePassword === false, lakshmiAgain.status);
+  const lakshmiContext = (await expect('the teacher opens the app', lakshmiAgain.data?.session?.access_token, 'GET', '/auth/context')).data;
+  check('and is a Teacher', lakshmiContext?.roles?.includes('Teacher') && lakshmiContext?.mustChangePassword === false, lakshmiContext?.roles);
+  const raviLogin = await call(null, 'POST', '/auth/login', { identifier: `ravi.${RUN}@school.example`, password: raviT.firstPassword });
+  check('a teacher with an email can also sign in with it', raviLogin.status === 201, raviLogin.status);
+
+  heading('Students, enrollment, guardians (continued)');
   const visible = (await call(teacher, 'GET', '/students?search=TEST-STUDENT-001')).data;
   check('teacher sees students in assigned classes', visible.some((s) => s.id === studentId), visible?.map((s) => s.firstName));
   await expect('student cannot see another student', student, 'GET', `/students/${newStudent.id}`, undefined, 403);
@@ -228,13 +371,9 @@ async function main() {
   await expect('teacher cannot raise a general approval request', teacher, 'POST', '/approval-requests', {
     type: 'student.identity-change', entityType: 'student', entityId: studentId, reason: 'Not allowed', payload: { changes: { firstName: 'Changed' } }, tier: 3,
   }, 403);
-  const teacherStudent = (await expect('teacher can still register a student', teacher, 'POST', '/students', {
-    admissionNo: `E2E-T-${RUN}`, nfcId: `nfc-e2e-t-${RUN}`, password: `Stud#${RUN}`, firstName: 'Asha', lastName: 'Rao', dateOfBirth: '2013-06-11',
-  }, [201])).data;
-  check('card ID typed in lowercase is saved in uppercase', teacherStudent?.nfcId === `NFC-E2E-T-${RUN}`, teacherStudent?.nfcId);
-  await expect('same card in a different case is a duplicate', admin, 'POST', '/students', {
-    admissionNo: `E2E-D-${RUN}`, nfcId: `NFC-E2E-T-${RUN}`, password: `Stud#${RUN}`, firstName: 'Dup', lastName: 'Card', dateOfBirth: '2013-06-11',
-  }, 409);
+  await expect('School Admin cannot lower a Tier 4 change through the general route', admin, 'POST', '/approval-requests', {
+    type: 'student.identity-change', entityType: 'student', entityId: studentId, reason: 'Lower tier', payload: { changes: { firstName: 'Changed' } }, tier: 3,
+  }, 400);
   await expect('admin transfers the student (8-B to 8-A)', admin, 'POST', `/enrollments/${enrollment2.id}/transfer`, { sectionId: secA.id, reason: 'Parent request' }, [201]);
   const moved = (await call(admin, 'GET', `/enrollments/${enrollment2.id}`)).data;
   check('enrollment moved to section A', moved?.sectionId === secA.id, moved);
@@ -390,8 +529,9 @@ async function main() {
     heading('Super Admin school setup');
     const superAdmin = await login(creds.superAdmin.email, creds.superAdmin.password);
     const newTeacher = (await expect('Super Admin registers a teacher', superAdmin, 'POST', '/staff', {
-      email: `teacher.${RUN}@erp.local`, password: `Teach#${RUN}`, displayName: `Teacher ${RUN}`, employeeNo: `T-${RUN}`, nfcId: `NFC-T-${RUN}`, designation: 'Teacher',
-    })).data;
+      displayName: 'Super Admin Teacher', phone: `93${RUN.slice(-8)}`, joiningDate: '2026-06-12', teachingSubjects: ['Mathematics'], nfcId: `NFC-T-${RUN}`,
+    }, 201)).data;
+    check('Super Admin gets an app-made Teacher ID', /^T26[A-Z]\d{2}$/.test(newTeacher?.teacherId ?? ''), newTeacher?.teacherId);
     const superAssignment = (await expect('Super Admin assigns maths and class teacher of 8-B', superAdmin, 'POST', `/staff/${newTeacher?.id}/assignments`, {
       academicYearId: year.id, classId: cls.id, sectionId: secB.id, subjectId: maths.id, isClassTeacher: true,
     })).data;
@@ -462,7 +602,8 @@ async function main() {
   })).data;
   await expect('cannot assign before approval', admin, 'POST', '/student-fees', { feeStructureId: structure.id }, 409);
   await expect('submit for approval', admin, 'POST', `/fee-structures/${structure.id}/submit-approval`, { reason: 'New year fees' });
-  const approvedStructure = (await expect('approve fee structure', admin, 'POST', `/fee-structures/${structure.id}/approve`, {})).data;
+  await expect('School Admin cannot approve a fee structure', admin, 'POST', `/fee-structures/${structure.id}/approve`, {}, 403);
+  const approvedStructure = (await expect('Principal approves the fee structure', principal, 'POST', `/fee-structures/${structure.id}/approve`, {})).data;
   check('structure approved', approvedStructure?.status === 'APPROVED', approvedStructure?.status);
   await expect('edit after approval is blocked', admin, 'PATCH', `/fee-structures/${structure.id}`, { name: 'Changed' }, 409);
   const assigned = (await expect('assign to the whole class', admin, 'POST', '/student-fees', { feeStructureId: structure.id })).data;
@@ -472,8 +613,14 @@ async function main() {
   // Filter by this run's structure: the student's fees from earlier runs push it past page one.
   const fee = (await call(student, 'GET', `/student-fees?feeStructureId=${structure.id}`)).data?.[0];
   check('balance is 13000', fee?.balance === 13000, fee?.balance);
-  const discount = (await expect('discount applied directly by School Admin', admin, 'POST', `/student-fees/${fee.id}/apply-discount`, { amount: 1000, reason: 'Sibling discount' })).data;
-  check('discount reduces balance to 12000', discount?.studentFee?.balance === 12000, discount?.studentFee?.balance);
+  const discount = (await expect('discount is raised as a request', admin, 'POST', `/student-fees/${fee.id}/apply-discount`, { amount: 1000, reason: 'Sibling discount' })).data;
+  const discountRequest = discount?.approvalRequest;
+  check('discount is not applied before approval', discount?.applied === false && discountRequest?.requiredRoles?.join() === 'Principal', discount);
+  check('balance unchanged while pending', (await call(student, 'GET', `/student-fees?feeStructureId=${structure.id}`)).data?.[0]?.balance === 13000);
+  await expect('School Admin cannot approve a discount', admin, 'POST', `/approval-requests/${discountRequest?.id}/approve`, {}, 403);
+  await expect('Principal approves the discount', principal, 'POST', `/approval-requests/${discountRequest?.id}/approve`, { note: 'Sibling in Class 5' });
+  const discounted = (await call(student, 'GET', `/student-fees?feeStructureId=${structure.id}`)).data?.[0];
+  check('discount reduces balance to 12000', discounted?.balance === 12000, discounted?.balance);
   await expect('overpayment rejected', admin, 'POST', '/payments', { studentFeeId: fee.id, amount: 20000, method: 'CASH' }, 400);
   const cash = (await expect('record cash payment', admin, 'POST', '/payments', { studentFeeId: fee.id, amount: 5000, method: 'CASH', reference: 'Counter 1' })).data;
   check('cash verified with receipt', cash?.status === 'VERIFIED' && cash.receiptNo?.startsWith('RCPT-'), cash);
@@ -502,7 +649,8 @@ async function main() {
   const after = feeSummary?.fees?.find((f) => f.id === fee.id);
   check('balance now 4000 and PARTIAL', after?.balance === 4000 && after.status === 'PARTIAL', after);
   await expect('refund request (Tier 3)', admin, 'POST', `/payments/${cheque.id}/refund-request`, { reason: 'Cheque bounced later' });
-  await expect('approve refund', admin, 'POST', `/payments/${cheque.id}/refund`, {});
+  await expect('the requester cannot approve their own refund', admin, 'POST', `/payments/${cheque.id}/refund`, {}, 403);
+  await expect('Principal approves the refund', principal, 'POST', `/payments/${cheque.id}/refund`, {});
   await expect('overdue list', admin, 'GET', '/fees/overdue');
   await expect('fee report', admin, 'GET', `/fees/reports?from=${day(-30)}&to=${day(0)}`);
   await expect('teacher has no fee access', teacher, 'GET', '/student-fees', undefined, 403);
@@ -547,7 +695,9 @@ async function main() {
   })).data;
   if (!staffLeave) throw new Error('staff leave was not created');
   await expect('teacher cannot approve own leave', teacher, 'POST', `/staff-leaves/${staffLeave.id}/approve`, {}, 403);
-  const approvedLeave = (await expect('admin approves staff leave', admin, 'POST', `/staff-leaves/${staffLeave.id}/approve`, {})).data;
+  await expect('School Admin cannot decide staff leave', admin, 'POST', `/staff-leaves/${staffLeave.id}/approve`, {}, 403);
+  await expect('rejecting leave needs a reason', principal, 'POST', `/staff-leaves/${staffLeave.id}/reject`, {}, 400);
+  const approvedLeave = (await expect('Principal approves staff leave', principal, 'POST', `/staff-leaves/${staffLeave.id}/approve`, {})).data;
   check('substitute requests opened for timetabled periods', approvedLeave?.substitutesOpened >= 1, approvedLeave);
   const subs = (await expect('list substitute requests', admin, 'GET', '/substitute-requests?status=OPEN')).data;
   const sub = subs?.find((s) => s.originalStaffId === teacherStaff.id);
@@ -577,7 +727,8 @@ async function main() {
   const cert = (await expect('create bonafide certificate', admin, 'POST', '/certificates', { studentId, type: 'BONAFIDE', purpose: 'Bank account' })).data;
   await expect('cannot generate before approval', admin, 'POST', `/certificates/${cert.id}/generate`, undefined, 409);
   await expect('submit for approval (Tier 3)', admin, 'POST', `/certificates/${cert.id}/submit-approval`, { reason: 'Parent request' });
-  await expect('approve certificate', admin, 'POST', `/certificates/${cert.id}/approve`, {});
+  await expect('the requester cannot approve their own certificate', admin, 'POST', `/certificates/${cert.id}/approve`, {}, 403);
+  await expect('Principal approves the certificate', principal, 'POST', `/certificates/${cert.id}/approve`, {});
   const issued = (await expect('generate certificate', admin, 'POST', `/certificates/${cert.id}/generate`)).data;
   check('issued with serial number', issued?.status === 'ISSUED' && issued.serialNo, issued);
   await expect('issued certificate is immutable', admin, 'POST', `/certificates/${cert.id}/generate`, undefined, 409);
@@ -702,6 +853,23 @@ async function main() {
   await expect('security: suspicious activity', admin, 'GET', '/security-events/suspicious-activity');
   await expect('teacher cannot read audit log', teacher, 'GET', '/audit-logs', undefined, 403);
   await expect('built-in role cannot be renamed', admin, 'GET', '/roles');
+
+  heading('Senior accounts are Super Admin only');
+  const roleList = (await call(admin, 'GET', '/roles')).data ?? [];
+  const roleId = (name) => roleList.find((r) => r.name === name)?.id;
+  for (const name of ['Principal', 'School Admin', 'Accountant']) {
+    await expect(`School Admin cannot create ${name === 'Accountant' ? 'an' : 'a'} ${name} account`, admin, 'POST', '/users', {
+      email: `blocked.${RUN}@erp.local`, displayName: 'Blocked', password: `Blocked#${RUN}`, roleIds: [roleId(name)],
+    }, 403);
+  }
+  const principalUser = (await call(admin, 'GET', '/users')).data?.find((u) => u.email === creds.principal.email);
+  check('Principal account found', principalUser);
+  await expect('School Admin cannot change the Principal account', admin, 'PATCH', `/users/${principalUser?.id}`, { displayName: 'Changed by Admin' }, 403);
+  await expect('School Admin cannot deactivate the Principal', admin, 'POST', `/users/${principalUser?.id}/deactivate`, undefined, 403);
+  await expect('School Admin cannot give the Principal extra permissions', admin, 'POST', `/users/${principalUser?.id}/permission-overrides`, {
+    permissionCode: 'homework:read', effect: 'GRANT', reason: 'Test',
+  }, 403);
+  await expect('School Admin cannot make the student a Principal', admin, 'POST', `/users/${studentMe.id}/roles`, { roleId: roleId('Principal') }, 403);
 
   heading('Class, section and subject management');
   const manager = creds.superAdmin ? await login(creds.superAdmin.email, creds.superAdmin.password) : admin;

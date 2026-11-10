@@ -5,3 +5,7 @@ coverage/
 .env.*
 !.env.example
 *.log
+
+# First passwords written by npm run import:students. Never commit them.
+student-logins-*.csv
+*-logins.csv

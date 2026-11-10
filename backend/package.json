@@ -20,7 +20,8 @@
     "prisma:bootstrap-test-accounts": "ts-node scripts/bootstrap-test-accounts.ts",
     "prisma:seed-demo": "ts-node scripts/seed-demo-school.ts",
     "db:check-rls": "ts-node scripts/check-rls.ts",
-    "test:e2e": "node test/e2e/erp-flow.e2e.mjs"
+    "test:e2e": "node test/e2e/erp-flow.e2e.mjs",
+    "import:students": "ts-node scripts/import-students.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -46,6 +47,7 @@
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",
     "eslint": "^9.17.0",
+    "exceljs": "4.4.0",
     "jest": "^29.7.0",
     "prisma": "^6.0.0",
     "ts-jest": "^29.2.5",

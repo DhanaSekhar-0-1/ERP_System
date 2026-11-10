@@ -39,6 +39,13 @@ export class StaffController {
     return this.staff.findMany(user);
   }
 
+  /** Subject names a teacher can be registered for (the school's default list and class subjects). */
+  @Get('teaching-subjects')
+  @RequirePermissions('staff:read')
+  teachingSubjects(@CurrentUser() user: SupabaseUser) {
+    return this.staff.teachingSubjectOptions(user);
+  }
+
   @Get(':staffId')
   @RequirePermissions('staff:read')
   findOne(

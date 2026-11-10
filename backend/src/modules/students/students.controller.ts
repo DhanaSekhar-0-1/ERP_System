@@ -13,6 +13,7 @@ import { CurrentUser } from '../../common/auth/current-user.decorator';
 import { RequirePermissions } from '../../common/auth/permissions.decorator';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import { CreateStudentDto } from './dto/create-student.dto';
+import { ImportStudentsDto } from './dto/import-students.dto';
 import { ListStudentsDto } from './dto/list-students.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { StudentsService } from './students.service';
@@ -36,6 +37,16 @@ export class StudentsController {
     return this.students.create(user, input);
   }
 
+  /** Excel import: { dryRun: true } checks every row; { dryRun: false } imports if all are fine. */
+  @Post('import')
+  @RequirePermissions('students:manage')
+  importStudents(
+    @CurrentUser() user: SupabaseUser,
+    @Body() input: ImportStudentsDto,
+  ) {
+    return this.students.importStudents(user, input);
+  }
+
   @Get()
   @RequirePermissions('students:read')
   findMany(
@@ -52,6 +63,16 @@ export class StudentsController {
     @Param('studentId', ParseUUIDPipe) studentId: string,
   ) {
     return this.students.findOne(user, studentId);
+  }
+
+  /** Full Aadhaar: the student themself or the Accountant only; every view is logged. */
+  @Get(':studentId/aadhaar')
+  @RequirePermissions('students:read')
+  revealAadhaar(
+    @CurrentUser() user: SupabaseUser,
+    @Param('studentId', ParseUUIDPipe) studentId: string,
+  ) {
+    return this.students.revealAadhaar(user, studentId);
   }
 
   @Patch(':studentId')

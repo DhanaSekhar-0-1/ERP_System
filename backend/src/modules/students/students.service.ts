@@ -7,7 +7,6 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
 import { DatabaseService } from '../../common/database/database.service';
 import { SupabaseAuthService } from '../../common/auth/supabase-auth.service';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
@@ -15,8 +14,10 @@ import { AccessService, SchoolContext } from '../../common/access/access.service
 import { AuditService } from '../../common/audit/audit.service';
 import { ApprovalEngine } from '../../common/approvals/approval-engine.service';
 import { pageArgs, paged } from '../../common/http/pagination';
-import { ROLE } from '../../common/access/roles';
 import { CreateStudentDto } from './dto/create-student.dto';
+import { ImportStudentsDto } from './dto/import-students.dto';
+import { StudentRegistrationService } from './student-registration.service';
+import { maskAadhaar, revealAadhaar } from '../../common/identity/aadhaar';
 import { ListStudentsDto } from './dto/list-students.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 
@@ -31,6 +32,7 @@ export class StudentsService implements OnModuleInit {
     private readonly access: AccessService,
     private readonly audit: AuditService,
     private readonly approvals: ApprovalEngine,
+    private readonly registration: StudentRegistrationService,
   ) {}
 
   onModuleInit(): void {
@@ -70,76 +72,47 @@ export class StudentsService implements OnModuleInit {
     });
   }
 
+  /** Registers one student; see StudentRegistrationService for the rules. */
   async create(authUser: SupabaseUser, input: CreateStudentDto) {
+    const context = await this.registration.registrationContext(authUser);
+    return this.registration.createOne(context, input);
+  }
+
+  /** Checks (dry run) or imports rows from the school's Excel sheet. */
+  async importStudents(authUser: SupabaseUser, input: ImportStudentsDto) {
+    const context = await this.registration.registrationContext(authUser);
+    return this.registration.importRows(context, input);
+  }
+
+  /**
+   * The full Aadhaar number, for the student themself and the Accountant only. Everyone else
+   * sees it masked. Every reveal is written to the audit log.
+   */
+  async revealAadhaar(authUser: SupabaseUser, studentId: string) {
     const context = await this.access.schoolContext(authUser);
-    await this.assertNfcFree(input.nfcId);
-
-    const studentId = randomUUID();
-    const displayName = `${input.firstName.trim()} ${input.lastName?.trim() ?? ''}`.trim();
-    const loginEmail = `${studentId}@students.erp.local`;
-    const managedAuthUser = await this.supabaseAuth.createManagedUser({
-      email: loginEmail,
-      password: input.password,
-      displayName,
-    });
-
-    try {
-      const result = await this.database.$transaction(async (transaction) => {
-        const studentRole = await transaction.role.findUnique({
-          where: { name: ROLE.STUDENT },
-        });
-        if (!studentRole) {
-          throw new NotFoundException('Student role is missing; run the seed first');
-        }
-        const erpUser = await transaction.user.create({
-          data: {
-            authUserId: managedAuthUser.id,
-            email: loginEmail,
-            displayName,
-            status: 'ACTIVE',
-            organizationId: context.organizationId,
-            schoolId: context.schoolId,
-          },
-        });
-        await transaction.userRole.create({
-          data: { userId: erpUser.id, roleId: studentRole.id },
-        });
-        const student = await transaction.student.create({
-          data: {
-            id: studentId,
-            userId: erpUser.id,
-            schoolId: context.schoolId,
-            admissionNo: input.admissionNo.trim(),
-            nfcId: input.nfcId.trim().toUpperCase(),
-            firstName: input.firstName.trim(),
-            lastName: input.lastName?.trim() || null,
-            dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
-            phone: input.phone?.trim() || null,
-            address: input.address?.trim() || null,
-          },
-        });
-        await this.audit.record(
-          context,
-          {
-            action: 'student.created',
-            entityType: 'student',
-            entityId: student.id,
-            newValue: { admissionNo: student.admissionNo, firstName: student.firstName },
-          },
-          transaction,
-        );
-        return student;
-      });
-      return { ...result, loginId: result.id };
-    } catch (error) {
-      await this.supabaseAuth.deleteManagedUser(managedAuthUser.id);
-      if (this.isUniqueConstraintError(error)) {
-        throw new ConflictException(
-          'A student with this admission number or NFC ID already exists',
-        );
-      }
-      throw error;
+    const own = context.studentId === studentId;
+    if (!own && !context.isAccountant) {
+      throw new ForbiddenException('Only the student and the Accountant can see the full Aadhaar number');
     }
+    if (!own) {
+      await this.access.assertStudentAccess(context, studentId);
+    }
+    const student = await this.database.student.findFirst({
+      where: { id: studentId, schoolId: context.schoolId },
+      // An explicit select brings back the column the client hides by default.
+      select: { aadhaarEncrypted: true, aadhaarLast4: true, aadhaarEnrolmentNo: true },
+    });
+    if (!student) throw new NotFoundException('Student not found');
+    if (!student.aadhaarEncrypted) {
+      return { aadhaar: null, enrolmentNo: student.aadhaarEnrolmentNo };
+    }
+    await this.audit.record(context, {
+      action: 'student.aadhaar-revealed',
+      entityType: 'student',
+      entityId: studentId,
+      metadata: { by: own ? 'student' : 'accountant' },
+    });
+    return { aadhaar: revealAadhaar(student.aadhaarEncrypted), enrolmentNo: student.aadhaarEnrolmentNo };
   }
 
   async findMany(authUser: SupabaseUser, input: ListStudentsDto) {
@@ -174,7 +147,7 @@ export class StudentsService implements OnModuleInit {
   async findOne(authUser: SupabaseUser, studentId: string) {
     const context = await this.access.schoolContext(authUser);
     await this.access.assertStudentAccess(context, studentId);
-    return this.database.student.findUniqueOrThrow({
+    const student = await this.database.student.findUniqueOrThrow({
       where: { id: studentId },
       include: {
         enrollments: {
@@ -189,6 +162,7 @@ export class StudentsService implements OnModuleInit {
         },
       },
     });
+    return { ...student, aadhaarMasked: maskAadhaar(student.aadhaarLast4) };
   }
 
   async update(

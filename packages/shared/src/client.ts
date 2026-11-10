@@ -31,6 +31,8 @@ import type {
   SchoolClass,
   Section,
   SectionSubject,
+  Gender,
+  RegisteredTeacher,
   Staff,
   StaffAssignment,
   SectionStudent,
@@ -162,6 +164,8 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
       await store.save(null);
     },
     context: () => call<UserContext>('GET', '/auth/context'),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      call<{ changed: boolean }>('POST', '/auth/change-password', { currentPassword, newPassword }),
 
     principalDashboard: () => call<PrincipalDashboard>('GET', '/dashboards/principal'),
     attendanceTrend: (from: string, to: string) =>
@@ -268,13 +272,16 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
     staff: () => call<Staff[]>('GET', '/staff'),
     createTeacher: (input: {
       displayName: string;
-      email: string;
-      password: string;
-      employeeNo: string;
-      nfcId: string;
-      designation?: string;
-      phone?: string;
-    }) => call<Staff>('POST', '/staff', input),
+      phone: string;
+      joiningDate: string;
+      teachingSubjects: string[];
+      gender?: Gender;
+      dateOfBirth?: string;
+      email?: string;
+      address?: string;
+      nfcId?: string;
+    }) => call<RegisteredTeacher>('POST', '/staff', input),
+    teachingSubjects: () => call<string[]>('GET', '/staff/teaching-subjects'),
     staffAssignments: (academicYearId: string) =>
       call<StaffAssignment[]>('GET', `/staff-assignments${query({ academicYearId })}`),
     assignTeacher: (

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from './current-user.decorator';
 import { Public } from './public.decorator';
+import { AllowBeforePasswordChange } from './password-change.decorator';
 import { SupabaseUser } from './supabase-user.interface';
 import { AuthService, ErpUserProfile } from './auth.service';
 import { SupabaseAuthService } from './supabase-auth.service';
@@ -96,6 +97,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @AllowBeforePasswordChange()
   async me(@CurrentUser() user: SupabaseUser): Promise<{
     supabaseUser: SupabaseUser;
     erpUser: ErpUserProfile;
@@ -110,6 +112,7 @@ export class AuthController {
 
   /** Who the caller is in the ERP, so clients can choose which screens to show. */
   @Get('context')
+  @AllowBeforePasswordChange()
   async context(@CurrentUser() user: SupabaseUser) {
     const context = await this.access.context(user);
     const school = context.schoolId
@@ -128,10 +131,12 @@ export class AuthController {
       staffId: context.staffId,
       studentId: context.studentId,
       guardianId: context.guardianId,
+      mustChangePassword: context.mustChangePassword,
     };
   }
 
   @Post('logout')
+  @AllowBeforePasswordChange()
   async logout(@CurrentUser() user: SupabaseUser) {
     if (user.accessToken) {
       await this.supabaseAuth.signOut(user.accessToken, 'local');
@@ -146,9 +151,13 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @AllowBeforePasswordChange()
   async changePassword(@CurrentUser() user: SupabaseUser, @Body() input: ChangePasswordDto) {
     if (!user.email) {
       throw new BadRequestException('This account has no email address');
+    }
+    if (input.newPassword === input.currentPassword) {
+      throw new BadRequestException('Choose a new password that is different from the current one');
     }
     const result = await this.supabaseAuth.changePassword(
       user.id,
@@ -157,6 +166,10 @@ export class AuthController {
       input.newPassword,
     );
     const erpUser = await this.erpUser(user);
+    if (erpUser.mustChangePassword) {
+      await this.database.user.update({ where: { id: erpUser.id }, data: { mustChangePassword: false } });
+      this.access.invalidate();
+    }
     await this.audit.record(null, {
       action: 'auth.password-changed',
       entityType: 'user',
@@ -167,6 +180,7 @@ export class AuthController {
   }
 
   @Get('sessions')
+  @AllowBeforePasswordChange()
   async sessions(@CurrentUser() user: SupabaseUser) {
     const erpUser = await this.erpUser(user);
     const sessions = await this.database.userSession.findMany({
@@ -187,6 +201,7 @@ export class AuthController {
   }
 
   @Delete('sessions/all')
+  @AllowBeforePasswordChange()
   async revokeAllSessions(@CurrentUser() user: SupabaseUser) {
     if (user.accessToken) {
       await this.supabaseAuth.signOut(user.accessToken, 'global');
@@ -196,6 +211,7 @@ export class AuthController {
   }
 
   @Delete('sessions/:sessionId')
+  @AllowBeforePasswordChange()
   async revokeSession(@CurrentUser() user: SupabaseUser, @Param('sessionId') sessionId: string) {
     const erpUser = await this.erpUser(user);
     const result = await this.database.userSession.updateMany({
@@ -233,7 +249,7 @@ export class AuthController {
   private async erpUser(user: SupabaseUser) {
     const erpUser = await this.database.user.findUnique({
       where: { authUserId: user.id },
-      select: { id: true, schoolId: true },
+      select: { id: true, schoolId: true, mustChangePassword: true },
     });
     if (!erpUser) {
       throw new ForbiddenException('ERP user profile is required');

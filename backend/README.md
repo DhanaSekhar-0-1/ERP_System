@@ -64,7 +64,54 @@ guard rejects its tokens from then on. Five failed logins for one identifier wit
 
 Seeded roles: Super Admin, School Admin, Principal, Teacher, Accountant, Parent,
 Student, Librarian, Transport Staff, Reception. Rerun `npm run prisma:seed` after
-pulling changes; it only adds.
+pulling changes; it only adds. Super Admin gets every permission any role has.
+
+**Account and approval rules** (see [docs/mvp-plan.md](../docs/mvp-plan.md) for the full plan):
+
+- Only a Super Admin can create, give or change the Super Admin, School Admin, Principal
+  and Accountant roles and the users who hold them (`UsersService`).
+- Only the Principal approves or rejects staff leave; a rejection needs a reason
+  (`LeavesService`).
+- A fee discount is always a request; only the Principal approves it, never their own.
+  Fee structures are approved only by the Principal too.
+- Approval requests are raised from each module's own route, which sets the tier.
+  `POST /approval-requests` accepts only types registered with `generalRequest: true` (none
+  today). Someone other than the requester must approve, unless the type sets
+  `allowSelfApproval` (section transfers). Types fix their approvers with `approverRoles`.
+- The Parent role and its routes remain, but the agreed plan removes the parent login from
+  the apps; the family uses the student's login.
+
+**Student registration** (`StudentRegistrationService`): only the School Admin or Super Admin.
+`POST /students` and `POST /students/import` (Excel rows, `dryRun` first) run the same checks.
+The admission number is the login ID; the first password is the first 4 letters of the family
+name, `@`, and the last 4 digits of the parent's mobile, and `users.must_change_password` keeps
+every route except those marked `@AllowBeforePasswordChange` closed until it is changed.
+Aadhaar is stored only as AES-256-GCM ciphertext, last 4 digits and a keyed hash
+(`common/identity/aadhaar.ts`), needs `PII_ENCRYPTION_KEY` (32 random bytes, base64; keep it
+backed up), and is left out of every query by `DatabaseService` unless selected explicitly.
+
+**Teacher registration** (`StaffService.create`): School Admin or Super Admin. The Teacher ID
+(`common/identity/teacher-id.ts`, e.g. T26A05) comes from `id_sequences` inside the
+registration transaction and is stored in `staff_profiles.employee_no`; the first password is
+random and must be changed at first login. Subjects are checked against
+`GET /staff/teaching-subjects`. Teachers sign in with the Teacher ID or their email.
+
+**Excel import script** (`scripts/import-students.ts`, uses `exceljs`):
+
+```bash
+cd backend
+npm run import:students -- --template students-template.xlsx
+npm run import:students -- --file students.xlsx
+npm run import:students -- --file students.xlsx --commit --out student-logins.csv
+```
+
+Sign-in comes from `IMPORT_LOGIN` and `IMPORT_PASSWORD` (a School Admin or Super Admin) in the
+environment or `backend/.env`, never the command line; `API_URL` defaults to
+`http://localhost:3000/api/v1`. Options: `--sheet <name>`, `--year <academicYearId>`.
+
+The dry run lists problems by sheet row and saves nothing; `--commit` imports only when every
+row passes and writes the logins with first passwords to a CSV (ignored by git). Rows whose
+admission number starts with EXAMPLE (the template's examples) are always left out.
 
 **Sensitivity tiers.** Changes follow the architecture document:
 
@@ -72,12 +119,12 @@ pulling changes; it only adds.
 |---|---|---|
 | 1 | Applied immediately, audited | Parent edits child contact details |
 | 2 | Applied with a required reason, audited | Teacher corrects attendance within 48 hours |
-| 3 | Approval request; a School Admin or Principal approves | Older attendance corrections, section transfers, fee structures, discounts, refunds, certificates |
+| 3 | Approval request; a School Admin or Principal approves (discounts: Principal only) | Older attendance corrections, section transfers, fee structures, discounts, refunds, certificates |
 | 4 | Approval request with a supporting document; School Admin and Principal both approve | Student name/DOB/admission number, post-release mark changes, re-opening released results, transfer certificates |
 
 Requests live under `/approval-requests` (`approve`, `reject`, `cancel`, `history`).
-A School Admin raising a Tier 4 request fills the School Admin slot; the Principal
-completes it. The change is applied in the same transaction as the final approval.
+A School Admin (or Super Admin) raising a Tier 4 request fills the School Admin slot; only
+a Principal can complete it. The change is applied in the same transaction as the final approval.
 
 **Audit.** Sensitive mutations append to `audit_logs` (actor, role, old and new
 values, reason, approval id, IP, request id). There are no update or delete routes

@@ -11,6 +11,12 @@ import { AccessService, SchoolContext } from '../../common/access/access.service
 import { AuditService } from '../../common/audit/audit.service';
 import { ROLE } from '../../common/access/roles';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import { defaultSubjects } from '../../common/academics/default-subjects';
+import { normaliseMobile } from '../../common/identity/first-password';
+import { randomFirstPassword, teacherCode } from '../../common/identity/teacher-id';
+import { ageInYears, nameProblem, realDate } from '../../common/identity/text-rules';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 
 const USER_SELECT = {
@@ -30,73 +36,58 @@ export class StaffService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * Registers a teacher (MVP1, docs/mvp-plan.md): School Admin or Super Admin only. The app
+   * makes the Teacher ID (T26A05) from the school's counter, which is also the login ID, and a
+   * random first password that is shown once and must be changed at first login.
+   */
   async create(authUser: SupabaseUser, input: CreateStaffDto) {
     const context = await this.access.schoolContext(authUser);
-    this.access.assertAdmin(context);
-    const email = input.email.trim().toLowerCase();
-    await this.assertNfcFree(input.nfcId);
-
-    let authUserId = input.authUserId;
-    let createdLogin = false;
-    if (authUserId) {
-      const account = await this.supabaseAuth.getManagedUser(authUserId);
-      if (account.email?.toLowerCase() !== email) {
-        throw new BadRequestException('Email does not match the login account');
-      }
-    } else {
-      if (!input.password) {
-        throw new BadRequestException('Provide authUserId or a password for the new login');
-      }
-      const account = await this.supabaseAuth.createManagedUser({
-        email,
-        password: input.password,
-        displayName: input.displayName.trim(),
-      });
-      authUserId = account.id;
-      createdLogin = true;
+    this.access.assertAdmin(context, 'Only the School Admin or Super Admin can register teachers');
+    const checked = await this.checkTeacher(context.schoolId, input);
+    if (checked.errors.length) {
+      throw new BadRequestException(checked.errors.join('; '));
     }
 
+    const staffId = randomUUID();
+    const firstPassword = randomFirstPassword();
+    const displayName = input.displayName.trim();
+    const loginEmail = checked.email ?? `${staffId}@staff.erp.local`;
+    const account = await this.supabaseAuth.createManagedUser({
+      email: loginEmail,
+      password: firstPassword,
+      displayName,
+    });
+
     try {
-      return await this.database.$transaction(async (transaction) => {
-        const existing = await transaction.user.findUnique({
-          where: { authUserId },
-          select: { id: true, schoolId: true, status: true, staffProfile: { select: { id: true } } },
-        });
-        if (existing?.schoolId && existing.schoolId !== context.schoolId) {
-          throw new ConflictException('User belongs to another school');
-        }
-        if (existing?.staffProfile) {
-          throw new ConflictException('Staff profile already exists');
-        }
-        if (existing && existing.status === 'SUSPENDED') {
-          throw new ConflictException('This user is suspended; activate the account first');
-        }
-        const teacherRole = await transaction.role.findUniqueOrThrow({
-          where: { name: ROLE.TEACHER },
-        });
-        const data = {
-          email,
-          displayName: input.displayName.trim(),
-          phone: input.phone?.trim() || null,
-          organizationId: context.organizationId,
-          schoolId: context.schoolId,
-          status: 'ACTIVE' as const,
-        };
-        const user = existing
-          ? await transaction.user.update({ where: { id: existing.id }, data })
-          : await transaction.user.create({ data: { ...data, authUserId: authUserId as string } });
-        await transaction.userRole.upsert({
-          where: { userId_roleId: { userId: user.id, roleId: teacherRole.id } },
-          create: { userId: user.id, roleId: teacherRole.id },
-          update: {},
-        });
-        const staff = await transaction.staffProfile.create({
+      const staff = await this.database.$transaction(async (transaction) => {
+        const teacherId = await this.nextTeacherId(transaction, context.schoolId, checked.joiningDate);
+        const teacherRole = await transaction.role.findUniqueOrThrow({ where: { name: ROLE.TEACHER } });
+        const user = await transaction.user.create({
           data: {
+            authUserId: account.id,
+            email: loginEmail,
+            displayName,
+            phone: checked.phone,
+            status: 'ACTIVE',
+            mustChangePassword: true,
+            organizationId: context.organizationId,
+            schoolId: context.schoolId,
+          },
+        });
+        await transaction.userRole.create({ data: { userId: user.id, roleId: teacherRole.id } });
+        const created = await transaction.staffProfile.create({
+          data: {
+            id: staffId,
             userId: user.id,
             schoolId: context.schoolId,
-            employeeNo: input.employeeNo.trim(),
-            nfcId: input.nfcId.trim().toUpperCase(),
-            designation: input.designation?.trim() || null,
+            employeeNo: teacherId,
+            nfcId: checked.nfcId,
+            joiningDate: checked.joiningDate,
+            gender: input.gender ?? null,
+            dateOfBirth: checked.dateOfBirth,
+            address: input.address?.trim() || null,
+            teachingSubjects: checked.subjects,
           },
           include: { user: { select: USER_SELECT } },
         });
@@ -105,22 +96,136 @@ export class StaffService {
           {
             action: 'staff.created',
             entityType: 'staff',
-            entityId: staff.id,
-            newValue: { email, employeeNo: staff.employeeNo },
+            entityId: created.id,
+            newValue: { teacherId, displayName, subjects: checked.subjects },
           },
           transaction,
         );
-        return staff;
+        return created;
       });
+      return {
+        ...staff,
+        teacherId: staff.employeeNo,
+        loginId: staff.employeeNo,
+        firstPassword,
+        mustChangePassword: true,
+      };
     } catch (error) {
-      if (createdLogin && authUserId) {
-        await this.supabaseAuth.deleteManagedUser(authUserId);
-      }
+      await this.supabaseAuth.deleteManagedUser(account.id);
       if (this.isUniqueError(error)) {
-        throw new ConflictException('Employee number, email, or NFC ID already exists');
+        throw new ConflictException('This email or NFC card is already in use');
       }
       throw error;
     }
+  }
+
+  /** Subjects a teacher can be registered for: the school's default list and its class subjects. */
+  async teachingSubjectOptions(authUser: SupabaseUser) {
+    const context = await this.access.schoolContext(authUser);
+    return [...(await this.subjectNames(context.schoolId)).values()].sort((a, b) => a.localeCompare(b));
+  }
+
+  private async subjectNames(schoolId: string): Promise<Map<string, string>> {
+    const [defaults, subjects] = await Promise.all([
+      defaultSubjects(this.database, schoolId),
+      this.database.subject.findMany({ where: { schoolId }, select: { name: true }, distinct: ['name'] }),
+    ]);
+    const names = new Map<string, string>();
+    for (const name of [...defaults.map((d) => d.name), ...subjects.map((s) => s.name)]) {
+      const key = name.trim().toLowerCase();
+      if (key && !names.has(key)) names.set(key, name.trim());
+    }
+    return names;
+  }
+
+  private async checkTeacher(schoolId: string, input: CreateStaffDto) {
+    const errors: string[] = [];
+    const nameError = nameProblem('full name', input.displayName, { required: true });
+    if (nameError) errors.push(nameError);
+
+    const phone = input.phone ? normaliseMobile(input.phone) : null;
+    if (!phone) errors.push('mobile must be a 10-digit mobile number');
+
+    const joiningDate = realDate(input.joiningDate);
+    const nextYear = Date.now() + 365 * 86_400_000;
+    if (!joiningDate) errors.push('joining date is missing or not a date');
+    else if (joiningDate.getTime() > nextYear) errors.push('joining date is more than a year away');
+    else if (joiningDate.getUTCFullYear() < 1970) errors.push('joining date is before 1970');
+
+    let dateOfBirth: Date | null = null;
+    if (input.dateOfBirth) {
+      dateOfBirth = realDate(input.dateOfBirth);
+      if (!dateOfBirth) errors.push('date of birth is not a date');
+      else {
+        const age = ageInYears(dateOfBirth);
+        if (age < 18 || age > 80) errors.push('date of birth gives an age outside 18 to 80 years');
+      }
+    }
+
+    const known = await this.subjectNames(schoolId);
+    const subjects: string[] = [];
+    for (const raw of input.teachingSubjects ?? []) {
+      const canonical = known.get(raw.trim().toLowerCase());
+      if (!canonical) errors.push(`subject "${raw.trim()}" is not in the school's subject list`);
+      else if (!subjects.includes(canonical)) subjects.push(canonical);
+    }
+    if (!subjects.length && !errors.some((e) => e.startsWith('subject'))) {
+      errors.push('choose at least one subject');
+    }
+
+    const address = input.address?.trim() ?? '';
+    if (address && (/[<>\x00-\x1F\x7F]/.test(address) || /^[=+@]/.test(address))) {
+      errors.push('address cannot contain < > or control characters, or start with =, + or @');
+    }
+
+    let email: string | null = null;
+    if (input.email?.trim()) {
+      email = input.email.trim().toLowerCase();
+      const taken = await this.database.user.findUnique({ where: { email }, select: { id: true } });
+      if (taken) errors.push('this email is already used by another account');
+    }
+
+    let nfcId: string | null = null;
+    if (input.nfcId?.trim()) {
+      nfcId = input.nfcId.trim().toUpperCase();
+      if (!/^[A-Z0-9][A-Z0-9:_-]*$/.test(nfcId)) {
+        errors.push('NFC card ID can only contain letters, numbers, :, _ and -');
+      } else {
+        const [student, staff] = await Promise.all([
+          this.database.student.findUnique({ where: { nfcId }, select: { id: true } }),
+          this.database.staffProfile.findUnique({ where: { nfcId }, select: { id: true } }),
+        ]);
+        if (student || staff) errors.push(`card ${nfcId} is already given to someone else`);
+      }
+    }
+
+    return { errors, phone, joiningDate: joiningDate as Date, dateOfBirth, subjects, email, nfcId };
+  }
+
+  /**
+   * The next Teacher ID from the school's counter, inside the registration transaction, so two
+   * registrations at once cannot get the same ID. Skips any number already used (for example an
+   * employee number typed by hand before MVP1).
+   */
+  private async nextTeacherId(
+    transaction: Prisma.TransactionClient,
+    schoolId: string,
+    joiningDate: Date,
+  ): Promise<string> {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const sequence = await transaction.idSequence.upsert({
+        where: { schoolId_kind: { schoolId, kind: 'teacher' } },
+        create: { schoolId, kind: 'teacher', lastValue: 1 },
+        update: { lastValue: { increment: 1 } },
+      });
+      const code = teacherCode(joiningDate.getUTCFullYear(), sequence.lastValue);
+      const used = await transaction.staffProfile.findFirst({
+        where: { schoolId, employeeNo: { equals: code, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (!used) return code;
+    }
+    throw new ConflictException('Could not find a free Teacher ID; try again');
   }
 
   async findMany(authUser: SupabaseUser) {

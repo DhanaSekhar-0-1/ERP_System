@@ -1,6 +1,6 @@
-import type { StaffAssignment } from '@erp/shared';
+import type { Gender, RegisteredTeacher, StaffAssignment } from '@erp/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BookOpen, UserPlus } from 'lucide-react';
+import { BookOpen, Copy, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
@@ -9,27 +9,86 @@ import { useActiveYear } from '../hooks';
 import { Dialog, Field } from '../components/Dialog';
 import { buttonClass, Card, errorText, ghostButtonClass, inputClass, Message, PageHeader } from '../components/ui';
 
+const today = () => new Date().toISOString().slice(0, 10);
+
+/** Shown once after registering: the login and first password to hand to the teacher. */
+function RegisteredPanel({ teacher, onClose }: { teacher: RegisteredTeacher; onClose(): void }) {
+  const [copied, setCopied] = useState(false);
+  const text = `Login ID: ${teacher.loginId}\nFirst password: ${teacher.firstPassword}`;
+  return (
+    <Dialog
+      title="Teacher registered"
+      onClose={onClose}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      footer={<button className={buttonClass}>Done</button>}
+    >
+      <p className="text-sm">
+        <span className="font-bold">{teacher.user.displayName}</span> can now sign in. Give them these details. The
+        password is shown only now, and they must change it the first time they sign in.
+      </p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-xl border border-line bg-page p-4">
+        <dt className="text-sm text-muted">Teacher ID (login)</dt>
+        <dd className="font-mono text-lg font-extrabold">{teacher.loginId}</dd>
+        <dt className="text-sm text-muted">First password</dt>
+        <dd className="font-mono text-lg font-extrabold">{teacher.firstPassword}</dd>
+        <dt className="text-sm text-muted">Subjects</dt>
+        <dd className="text-sm">{teacher.teachingSubjects.join(', ')}</dd>
+      </dl>
+      <button
+        type="button"
+        className={ghostButtonClass}
+        onClick={() => {
+          navigator.clipboard.writeText(text).then(() => setCopied(true), () => setCopied(false));
+        }}
+      >
+        <Copy className="size-4" aria-hidden /> {copied ? 'Copied' : 'Copy login details'}
+      </button>
+    </Dialog>
+  );
+}
+
 function RegisterTeacherDialog({ onClose }: { onClose(): void }) {
   const client = useQueryClient();
-  const [form, setForm] = useState({ displayName: '', email: '', password: '', employeeNo: '', nfcId: '', designation: 'Teacher', phone: '' });
+  const [form, setForm] = useState({
+    displayName: '',
+    phone: '',
+    joiningDate: today(),
+    gender: '' as Gender | '',
+    dateOfBirth: '',
+    email: '',
+    address: '',
+    nfcId: '',
+  });
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [registered, setRegistered] = useState<RegisteredTeacher | null>(null);
+  const options = useQuery({ queryKey: ['teaching-subjects'], queryFn: api.teachingSubjects });
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) =>
     setForm((current) => ({ ...current, [key]: event.target.value }));
+  const toggle = (name: string) =>
+    setSubjects((current) => (current.includes(name) ? current.filter((s) => s !== name) : [...current, name]));
   const create = useMutation({
     mutationFn: () =>
       api.createTeacher({
-        ...form,
         displayName: form.displayName.trim(),
-        email: form.email.trim(),
-        employeeNo: form.employeeNo.trim(),
-        nfcId: form.nfcId.trim(),
-        designation: form.designation.trim() || undefined,
-        phone: form.phone.trim() || undefined,
+        phone: form.phone.trim(),
+        joiningDate: form.joiningDate,
+        teachingSubjects: subjects,
+        gender: form.gender || undefined,
+        dateOfBirth: form.dateOfBirth || undefined,
+        email: form.email.trim() || undefined,
+        address: form.address.trim() || undefined,
+        nfcId: form.nfcId.trim() || undefined,
       }),
-    onSuccess: async () => {
+    onSuccess: async (teacher) => {
       await client.invalidateQueries({ queryKey: ['staff'] });
-      onClose();
+      setRegistered(teacher);
     },
   });
+
+  if (registered) return <RegisteredPanel teacher={registered} onClose={onClose} />;
 
   return (
     <Dialog
@@ -42,33 +101,72 @@ function RegisterTeacherDialog({ onClose }: { onClose(): void }) {
       footer={
         <>
           <button type="button" onClick={onClose} className={ghostButtonClass}>Cancel</button>
-          <button disabled={create.isPending} className={buttonClass}>{create.isPending ? 'Saving…' : 'Register teacher'}</button>
+          <button disabled={create.isPending || subjects.length === 0} className={buttonClass}>
+            {create.isPending ? 'Saving…' : 'Register teacher'}
+          </button>
         </>
       }
     >
-      <Field label="Full name">
-        <input required autoFocus value={form.displayName} onChange={set('displayName')} className={inputClass} />
+      <p className="text-sm text-muted">
+        The app makes the Teacher ID, which is also the login, and a first password the teacher changes at first sign-in.
+      </p>
+      <Field label="Full name (in English letters)">
+        <input required autoFocus maxLength={80} value={form.displayName} onChange={set('displayName')} className={inputClass} />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Login email">
-          <input required type="email" value={form.email} onChange={set('email')} className={inputClass} />
+        <Field label="Mobile">
+          <input required inputMode="tel" placeholder="10 digits" value={form.phone} onChange={set('phone')} className={inputClass} />
         </Field>
-        <Field label="Temporary password">
-          <input required minLength={8} type="password" autoComplete="new-password" value={form.password} onChange={set('password')} className={inputClass} />
-        </Field>
-        <Field label="Employee number">
-          <input required value={form.employeeNo} onChange={set('employeeNo')} className={inputClass} />
-        </Field>
-        <Field label="NFC card ID">
-          <input required value={form.nfcId} onChange={set('nfcId')} className={`${inputClass} font-mono`} />
-        </Field>
-        <Field label="Designation">
-          <input value={form.designation} onChange={set('designation')} className={inputClass} />
-        </Field>
-        <Field label="Phone (optional)">
-          <input value={form.phone} onChange={set('phone')} className={inputClass} />
+        <Field label="Joining date">
+          <input required type="date" value={form.joiningDate} onChange={set('joiningDate')} className={inputClass} />
         </Field>
       </div>
+      <fieldset className="grid gap-2">
+        <legend className="text-sm font-semibold">Subjects they teach</legend>
+        <p className="text-xs text-muted">Pick one or more. The first one picked is the main subject.</p>
+        {options.isLoading && <p className="text-sm text-muted">Loading subjects…</p>}
+        {options.isError && <p className="text-sm text-red-600">{errorText(options.error)}</p>}
+        <div className="flex flex-wrap gap-2">
+          {options.data?.map((name) => {
+            const index = subjects.indexOf(name);
+            const on = index >= 0;
+            return (
+              <button
+                key={name}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggle(name)}
+                className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${on ? 'border-brand bg-brand text-white' : 'border-line bg-white hover:bg-page'}`}
+              >
+                {name}
+                {index === 0 && <span className="ml-1.5 text-[10px] uppercase tracking-wide">Main</span>}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Gender (optional)">
+          <select value={form.gender} onChange={set('gender')} className={inputClass}>
+            <option value="">Not given</option>
+            <option value="FEMALE">Female</option>
+            <option value="MALE">Male</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </Field>
+        <Field label="Date of birth (optional)">
+          <input type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')} className={inputClass} />
+        </Field>
+        <Field label="Email (optional)">
+          <input type="email" value={form.email} onChange={set('email')} className={inputClass} />
+        </Field>
+        <Field label="NFC card ID (optional)">
+          <input value={form.nfcId} onChange={set('nfcId')} className={`${inputClass} font-mono`} />
+        </Field>
+      </div>
+      <Field label="Address (optional)">
+        <textarea maxLength={300} value={form.address} onChange={set('address')} className={inputClass} rows={2} />
+      </Field>
       {create.isError && <p role="alert" className="text-sm font-medium text-red-600">{errorText(create.error)}</p>}
     </Dialog>
   );
@@ -120,7 +218,8 @@ export function TeachersPage() {
                 <div className="min-w-48 flex-1">
                   <p className="font-bold">{member.user.displayName}</p>
                   <p className="text-sm text-muted">
-                    {member.employeeNo} · {member.designation ?? 'Staff'} · {member.user.email}
+                    {member.employeeNo} · {member.teachingSubjects?.length ? member.teachingSubjects.join(', ') : member.designation ?? 'Staff'}
+                    {member.user.phone ? ` · ${member.user.phone}` : ''}
                   </p>
                   {classTeacher?.section && (
                     <span className="mt-1 inline-block rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-bold text-brand">

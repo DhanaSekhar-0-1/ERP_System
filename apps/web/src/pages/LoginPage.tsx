@@ -57,7 +57,7 @@ export function LoginPage() {
           <h2 className="text-3xl font-extrabold tracking-tight">Welcome back</h2>
           <p className="mt-2 mb-8 text-sm text-muted">Sign in with your school account.</p>
           <label className="mb-1.5 block text-sm font-semibold" htmlFor="identifier">
-            Email, student ID or staff ID
+            Admission number, Teacher ID or email
           </label>
           <input
             id="identifier"

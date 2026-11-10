@@ -3,7 +3,7 @@
 | Folder | What it is | Who uses it |
 |---|---|---|
 | `apps/web` | React + Vite + Tailwind | Principal, School Admin, Super Admin, Teacher |
-| `apps/mobile` | React Native + Expo | Teacher, Student, Parent |
+| `apps/mobile` | React Native + Expo | Teacher, Student (the family uses the student's login); the Parent screens are to be hidden in MVP1, see [docs/mvp-plan.md](../docs/mvp-plan.md) |
 | `packages/shared` | API client, types, colours | Both apps |
 
 ## 1. Start the backend
