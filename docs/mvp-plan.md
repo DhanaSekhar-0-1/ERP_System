@@ -39,7 +39,7 @@ Admin limited to their own school.
 | Account | Created by | Status |
 |---|---|---|
 | Principal, Admin, Accountant | Super Admin only | Built (2026-11-10) |
-| Teacher | Super Admin or Admin | Built |
+| Teacher | Super Admin or Admin, with an app-made Teacher ID | Built (2026-11-10) |
 | Student | Super Admin or Admin, one by one or from Excel | Built (2026-11-10) |
 
 A School Admin cannot give or change the Super Admin, School Admin, Principal or Accountant
@@ -75,6 +75,13 @@ The Principal's own salary and leave are not kept in the app.
 - **Subjects replace "designation":** one or more subjects, no limit; the first is the main one.
 - **Required in MVP1:** name, phone, joining date, at least one subject. NFC card optional until
   cards arrive.
+- **Built (2026-11-10):** `POST /staff` (School Admin or Super Admin) makes the Teacher ID from
+  the per-school counter inside the same transaction, skipping any number already used, and a
+  random first password such as `zr2k-yC9T` shown once and changed at first login (a pattern is
+  not needed because the Admin hands it over in person). Subjects must come from the school's
+  list (`GET /staff/teaching-subjects`: default subjects plus class subjects) and are saved in
+  the school's spelling. Email is optional; when given, the teacher can sign in with it as well
+  as the Teacher ID. Web: the Teachers page dialog, with a one-time panel showing the login.
 - **MVP2:** previous schools and experience, last monthly salary with proof (payslip or bank
   statement), documents (experience letters, certificates, ID proof), PAN and Aadhaar (masked).
   These can be added at registration or later by the Admin, or by the teacher after login.
@@ -214,7 +221,8 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 2a | Approval loophole: requests only from their own routes; someone other than the requester must approve | Done 2026-11-10 |
 | 3 | Database changes for teacher and student fields, and moving existing records over | Done 2026-11-10 (migration `20261110100000_mvp1_registration_fields`) |
 | 4 | Student creation: admission-number login, first password, forced change, import endpoint with a dry run | Done 2026-11-10 |
-| 5 | Teacher registration: app-made ID, subjects | Next |
+| 5 | Teacher registration: app-made ID, subjects | Done 2026-11-10 |
+| 5a | "Choose a new password" screen in the web and phone apps (the server already blocks other routes until the first password changes) | Next |
 | 6 | Teacher check-in and the Admin attendance dashboard | |
 | 7 | Leave screens on web and phone | |
 | 8 | Hide parent login and unused modules; host; Android build; device test | |

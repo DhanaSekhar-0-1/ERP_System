@@ -42,7 +42,7 @@ Shared services in `src/common`:
 |---|---|
 | Prisma schema and migrations | Current (14 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 529/529 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 555/555 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
@@ -101,6 +101,13 @@ then hiding the parent login and unused modules, hosting, and a device test. Alo
 2. A separate client database and hosting for the one-month pilot.
 3. Try real cards on an NFC phone.
 4. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+
+Done 2026-11-10: MVP1 teacher registration (step 5). `POST /staff` takes the MVP1 form, makes
+the Teacher ID (T26A05) from the school's counter and a random first password shown once, and
+checks subjects against the school's list; teachers sign in with the Teacher ID (or email). Web
+Teachers page dialog rebuilt and checked in the browser (registered T26A23). Login screens now
+say "Admission number, Teacher ID or email". Not built yet: a "choose a new password" screen in
+the apps, so a first sign-in can only change the password through the API.
 
 Done 2026-11-10: stricter registration checks after testing with 8 correct and 44 wrong or
 manipulated rows: names in English letters only, no impossible dates, 14-digit minimum for

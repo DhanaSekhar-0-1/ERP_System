@@ -459,14 +459,14 @@ export class SupabaseAuthService implements OnModuleInit {
 
   /**
    * Turns what the user typed into the login email: an email as is, a student's admission
-   * number, or (older accounts) a student or staff profile ID.
+   * number or a Teacher ID, or (older accounts) a student or staff profile ID.
    */
   private async resolveLoginEmail(identifier: string): Promise<string> {
     if (identifier.includes('@')) {
       return identifier;
     }
     if (!isUUID(identifier)) {
-      return this.emailForAdmissionNumber(identifier);
+      return this.emailForLoginId(identifier);
     }
     const student = await this.database.student.findUnique({
       where: { id: identifier },
@@ -486,23 +486,32 @@ export class SupabaseAuthService implements OnModuleInit {
   }
 
   /**
-   * Admission numbers are unique within a school, not across schools. With one school this is
-   * always one student; if two schools share a number, the student signs in with the email
-   * shown on their account instead.
+   * A student's admission number or a teacher's Teacher ID (T26A05). Both are unique within a
+   * school, not across schools, and in principle a school could give a student an admission
+   * number that looks like a Teacher ID; when more than one account matches, nobody is signed
+   * in and the person uses the email on their account instead.
    */
-  private async emailForAdmissionNumber(admissionNo: string): Promise<string> {
-    const matches = await this.database.student.findMany({
-      where: {
-        admissionNo: { equals: admissionNo, mode: 'insensitive' },
-        isArchived: false,
-        userId: { not: null },
-      },
-      select: { user: { select: { email: true } } },
-      take: 2,
-    });
-    if (matches.length !== 1 || !matches[0].user?.email) {
-      throw new UnauthorizedException('Invalid admission number or password');
+  private async emailForLoginId(loginId: string): Promise<string> {
+    const [students, staff] = await Promise.all([
+      this.database.student.findMany({
+        where: {
+          admissionNo: { equals: loginId, mode: 'insensitive' },
+          isArchived: false,
+          userId: { not: null },
+        },
+        select: { user: { select: { email: true } } },
+        take: 2,
+      }),
+      this.database.staffProfile.findMany({
+        where: { employeeNo: { equals: loginId, mode: 'insensitive' } },
+        select: { user: { select: { email: true } } },
+        take: 2,
+      }),
+    ]);
+    const emails = [...students, ...staff].map((match) => match.user?.email).filter(Boolean);
+    if (emails.length !== 1) {
+      throw new UnauthorizedException('Invalid login ID or password');
     }
-    return matches[0].user.email;
+    return emails[0] as string;
   }
 }

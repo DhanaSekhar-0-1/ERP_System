@@ -20,6 +20,7 @@ import {
   protectAadhaar,
 } from '../../common/identity/aadhaar';
 import { normaliseMobile, studentFirstPassword } from '../../common/identity/first-password';
+import { nameProblem, realDate } from '../../common/identity/text-rules';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { ImportStudentsDto } from './dto/import-students.dto';
 
@@ -57,8 +58,6 @@ interface BatchSeen {
 }
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
-/** Names: English letters, spaces, full stops, apostrophes and hyphens, starting with a letter. */
-const NAME = /^[A-Za-z][A-Za-z .'-]*$/;
 const ADMISSION_NO = /^[A-Za-z0-9][A-Za-z0-9/ .-]*$/;
 const CARD_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]*$/;
 const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
@@ -627,13 +626,7 @@ export class StudentRegistrationService {
 
   /** A real calendar date: 2015-02-31 is refused instead of quietly becoming 3 March. */
   private date(value: string | undefined): Date | null {
-    const match = value ? /^(\d{4})-(\d{2})-(\d{2})/.exec(value) : null;
-    if (!match) return null;
-    const [, year, month, day] = match.map(Number);
-    const date = new Date(Date.UTC(year, month - 1, day));
-    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
-      ? date
-      : null;
+    return realDate(value);
   }
 
   /**
@@ -644,16 +637,8 @@ export class StudentRegistrationService {
   private formatErrors(input: StudentInput): string[] {
     const errors: string[] = [];
     const name = (label: string, value: string | undefined, required: boolean, max = 80) => {
-      const text = value?.trim() ?? '';
-      if (!text) {
-        if (required) errors.push(`${label} is required`);
-        return;
-      }
-      if (text.length > max) errors.push(`${label} is longer than ${max} characters`);
-      else if (/[^\x00-\x7F]/.test(text)) errors.push(`${label} must be written in English letters`);
-      else if (!NAME.test(text)) {
-        errors.push(`${label} can only contain letters, spaces, full stops, apostrophes and hyphens`);
-      }
+      const problem = nameProblem(label, value, { required, max });
+      if (problem) errors.push(problem);
     };
     name('first name', input.firstName, true);
     name('family name', input.familyName, true);

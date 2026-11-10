@@ -90,6 +90,12 @@ Aadhaar is stored only as AES-256-GCM ciphertext, last 4 digits and a keyed hash
 (`common/identity/aadhaar.ts`), needs `PII_ENCRYPTION_KEY` (32 random bytes, base64; keep it
 backed up), and is left out of every query by `DatabaseService` unless selected explicitly.
 
+**Teacher registration** (`StaffService.create`): School Admin or Super Admin. The Teacher ID
+(`common/identity/teacher-id.ts`, e.g. T26A05) comes from `id_sequences` inside the
+registration transaction and is stored in `staff_profiles.employee_no`; the first password is
+random and must be changed at first login. Subjects are checked against
+`GET /staff/teaching-subjects`. Teachers sign in with the Teacher ID or their email.
+
 **Excel import script** (`scripts/import-students.ts`, uses `exceljs`):
 
 ```bash

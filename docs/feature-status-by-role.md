@@ -87,7 +87,7 @@ Runs the school day to day.
 | Classes and sections: create, rename, delete when empty; Section A and default subjects are added automatically | Done | Done (web) |
 | Per-section subjects: add, rename, remove, switch optional ones on and off | Done | Done (web) |
 | Default subject list for new sections (Sanskrit optional) | Done | Done (web) |
-| Register teachers with a login | Done | Done (web) |
+| Register teachers with an app-made Teacher ID, subjects and a one-time first password | Done | Done (web) |
 | One teacher per section subject; one class teacher per section | Done | Done (web) |
 | Exams: FA1-FA4, Q1-Q3, Pre-public (Class 10), Other; for several classes at once | Done | Done (web) |
 | Approve exam marks per section, or every ready section at once; send a section back | Done | Done (web) |

@@ -56,14 +56,14 @@ export default function Login() {
           <Text style={styles.subtitle}>Sign in with your school account.</Text>
 
           <View style={styles.form}>
-            <Text style={styles.label}>Email, student ID or staff ID</Text>
+            <Text style={styles.label}>Admission number, Teacher ID or email</Text>
             <TextInput
               value={identifier}
               onChangeText={setIdentifier}
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="username"
-              accessibilityLabel="Email, student ID or staff ID"
+              accessibilityLabel="Admission number, Teacher ID or email"
               style={styles.input}
             />
             <Text style={styles.label}>Password</Text>

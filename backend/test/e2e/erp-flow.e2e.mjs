@@ -320,6 +320,46 @@ async function main() {
   const rerun = (await expect('running the same sheet again', admin, 'POST', '/students/import', { dryRun: false, rows: [goodRow] }, 201)).data;
   check('re-running skips students already imported', rerun?.imported === 0 && rerun?.alreadyRegistered?.length === 1 && rerun?.problems?.length === 0, rerun);
 
+  heading('Teacher registration');
+  const subjectOptions = (await expect('list subjects a teacher can teach', admin, 'GET', '/staff/teaching-subjects')).data;
+  check('the subject list includes Mathematics', subjectOptions?.includes('Mathematics'), subjectOptions);
+  const teacherForm = {
+    displayName: 'Lakshmi Prasanna K', phone: `+91 96${RUN.slice(-8)}`, joiningDate: '2026-06-12',
+    teachingSubjects: ['mathematics', 'Physics', 'Mathematics'], gender: 'FEMALE', dateOfBirth: '1991-06-14',
+    nfcId: `nfc-tch-${RUN}`, address: '4-12, Gandhi Nagar, Vijayawada',
+  };
+  await expect('a teacher cannot register teachers', teacher, 'POST', '/staff', teacherForm, 403);
+  await expect('an unknown subject is refused', admin, 'POST', '/staff', { ...teacherForm, teachingSubjects: ['Maths'] }, 400);
+  await expect('a bad mobile is refused', admin, 'POST', '/staff', { ...teacherForm, phone: '12345' }, 400);
+  await expect('a name in Telugu script is refused', admin, 'POST', '/staff', { ...teacherForm, displayName: 'లక్ష్మి' }, 400);
+  await expect('a joining date that does not exist is refused', admin, 'POST', '/staff', { ...teacherForm, joiningDate: '2026-02-30' }, 400);
+  await expect('a card already given to a student is refused', admin, 'POST', '/staff', { ...teacherForm, nfcId: `NFC-E2E-${RUN}` }, 400);
+  const lakshmi = (await expect('School Admin registers a teacher', admin, 'POST', '/staff', teacherForm, 201)).data;
+  check('Teacher ID is T + joining year + count', /^T26[A-Z]\d{2}$/.test(lakshmi?.teacherId ?? ''), lakshmi?.teacherId);
+  check('the Teacher ID is the login ID', lakshmi?.loginId === lakshmi?.teacherId && lakshmi?.employeeNo === lakshmi?.teacherId);
+  check('a random first password is returned once', /^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/.test(lakshmi?.firstPassword ?? ''), lakshmi?.firstPassword);
+  check('subjects saved with the school spelling, main first, no repeats', JSON.stringify(lakshmi?.teachingSubjects) === JSON.stringify(['Mathematics', 'Physics']), lakshmi?.teachingSubjects);
+  check('card saved in capitals and joining date kept', lakshmi?.nfcId === `NFC-TCH-${RUN}` && lakshmi?.joiningDate?.startsWith('2026-06-12'), lakshmi);
+  check('no email given, so a private login email is used', lakshmi?.user?.email?.endsWith('@staff.erp.local'), lakshmi?.user?.email);
+  const raviT = (await expect('register a second teacher', admin, 'POST', '/staff', {
+    displayName: "Ravi D'Souza", phone: `95${RUN.slice(-8)}`, joiningDate: '2027-01-05', teachingSubjects: ['English'], email: `ravi.${RUN}@school.example`,
+  }, 201)).data;
+  const idNumber = (id) => (id.charCodeAt(3) - 65) * 99 + Number(id.slice(4));
+  check('the next teacher gets the next number and their own joining year', raviT?.teacherId?.startsWith('T27') && idNumber(raviT.teacherId) === idNumber(lakshmi.teacherId) + 1, [lakshmi?.teacherId, raviT?.teacherId]);
+  await expect('the same email cannot be used twice', admin, 'POST', '/staff', { ...teacherForm, nfcId: undefined, email: `ravi.${RUN}@school.example` }, 400);
+
+  const teacherLogin = await call(null, 'POST', '/auth/login', { identifier: lakshmi.teacherId.toLowerCase(), password: lakshmi.firstPassword });
+  check('teacher signs in with the Teacher ID and first password', teacherLogin.status === 201 && teacherLogin.data?.mustChangePassword === true, teacherLogin.status);
+  const lakshmiFirst = teacherLogin.data?.session?.access_token;
+  await expect('the teacher must change the password first', lakshmiFirst, 'GET', '/staff-assignments', undefined, 403);
+  await expect('teacher sets a new password', lakshmiFirst, 'POST', '/auth/change-password', { currentPassword: lakshmi.firstPassword, newPassword: `Lakshmi#${RUN}` });
+  const lakshmiAgain = await call(null, 'POST', '/auth/login', { identifier: lakshmi.teacherId, password: `Lakshmi#${RUN}` });
+  check('then signs in normally', lakshmiAgain.status === 201 && lakshmiAgain.data?.mustChangePassword === false, lakshmiAgain.status);
+  const lakshmiContext = (await expect('the teacher opens the app', lakshmiAgain.data?.session?.access_token, 'GET', '/auth/context')).data;
+  check('and is a Teacher', lakshmiContext?.roles?.includes('Teacher') && lakshmiContext?.mustChangePassword === false, lakshmiContext?.roles);
+  const raviLogin = await call(null, 'POST', '/auth/login', { identifier: `ravi.${RUN}@school.example`, password: raviT.firstPassword });
+  check('a teacher with an email can also sign in with it', raviLogin.status === 201, raviLogin.status);
+
   heading('Students, enrollment, guardians (continued)');
   const visible = (await call(teacher, 'GET', '/students?search=TEST-STUDENT-001')).data;
   check('teacher sees students in assigned classes', visible.some((s) => s.id === studentId), visible?.map((s) => s.firstName));
@@ -489,8 +529,9 @@ async function main() {
     heading('Super Admin school setup');
     const superAdmin = await login(creds.superAdmin.email, creds.superAdmin.password);
     const newTeacher = (await expect('Super Admin registers a teacher', superAdmin, 'POST', '/staff', {
-      email: `teacher.${RUN}@erp.local`, password: `Teach#${RUN}`, displayName: `Teacher ${RUN}`, employeeNo: `T-${RUN}`, nfcId: `NFC-T-${RUN}`, designation: 'Teacher',
-    })).data;
+      displayName: 'Super Admin Teacher', phone: `93${RUN.slice(-8)}`, joiningDate: '2026-06-12', teachingSubjects: ['Mathematics'], nfcId: `NFC-T-${RUN}`,
+    }, 201)).data;
+    check('Super Admin gets an app-made Teacher ID', /^T26[A-Z]\d{2}$/.test(newTeacher?.teacherId ?? ''), newTeacher?.teacherId);
     const superAssignment = (await expect('Super Admin assigns maths and class teacher of 8-B', superAdmin, 'POST', `/staff/${newTeacher?.id}/assignments`, {
       academicYearId: year.id, classId: cls.id, sectionId: secB.id, subjectId: maths.id, isClassTeacher: true,
     })).data;

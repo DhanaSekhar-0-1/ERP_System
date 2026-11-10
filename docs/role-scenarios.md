@@ -3,7 +3,7 @@
 What each role can do in the backend as of 2026-11-10 (`/api/v1`), based on the
 seeded permissions in `backend/prisma/seed.ts` and the service code. Every
 scenario marked **Works** is exercised by the end-to-end suite
-(`npm run test:e2e`, 529 checks passing).
+(`npm run test:e2e`, 555 checks passing).
 
 This page describes the API as built. The agreed plan, including changes not built yet
 (no parent login, admission-number login for students, salary, TC, promotion), is in
@@ -62,7 +62,7 @@ flowchart TD
 
 | Scenario | Status |
 |---|---|
-| Login by email, admission number, or (older accounts) student or staff ID | Works |
+| Login by email, admission number, Teacher ID, or (older accounts) student or staff ID | Works |
 | Generated first password must be changed before any other route works | Works |
 | Lockout after repeated failures | Works |
 | Logout and per-session revoke (token refused afterwards) | Works |
@@ -187,7 +187,7 @@ flowchart TD
 | Classes get Section A automatically; sections get their own copy of the default subjects | Works |
 | Per-section subjects: add, rename, remove, switch optional ones (Sanskrit) on and off | Works |
 | Delete classes, sections and subjects only when nothing depends on them; a class keeps one section | Works |
-| Staff with login in one call; activate/deactivate (signs them out) | Works |
+| Teachers registered with an app-made Teacher ID (login), random first password, subjects from the school's list; activate/deactivate (signs them out) | Works |
 | One teacher per section subject; one class teacher per section (replacing the old one) | Works |
 | Removing an assignment or switching a subject off removes the teacher's access at once | Works |
 | Students: register (form or Excel import with dry run; admission-number login; first password changed at first login; Aadhaar encrypted and masked), edit, assign NFC cards, archive/restore, history, documents | Works |
