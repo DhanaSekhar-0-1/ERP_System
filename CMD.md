@@ -11,6 +11,18 @@ For development mode with automatic reload:
 cd /d D:\Pro_Grade_ERP_System\backend
 npm run start:dev
 
+Import students from the school's Excel sheet (see docs/mvp-plan.md section 6)
+```bash
+cd backend
+npm run import:students -- --template students-template.xlsx
+npm run import:students -- --file students.xlsx
+npm run import:students -- --file students.xlsx --commit --out student-logins.csv
+```
+
+Sign-in comes from `IMPORT_LOGIN` and `IMPORT_PASSWORD` (a School Admin or Super Admin) in the
+environment or `backend/.env`, never the command line; `API_URL` defaults to
+`http://localhost:3000/api/v1`. Options: `--sheet <name>`, `--year <academicYearId>`.
+
 Test health API from another CMD window
 curl http://localhost:3000/api/v1/health
 

@@ -90,6 +90,23 @@ Aadhaar is stored only as AES-256-GCM ciphertext, last 4 digits and a keyed hash
 (`common/identity/aadhaar.ts`), needs `PII_ENCRYPTION_KEY` (32 random bytes, base64; keep it
 backed up), and is left out of every query by `DatabaseService` unless selected explicitly.
 
+**Excel import script** (`scripts/import-students.ts`, uses `exceljs`):
+
+```bash
+cd backend
+npm run import:students -- --template students-template.xlsx
+npm run import:students -- --file students.xlsx
+npm run import:students -- --file students.xlsx --commit --out student-logins.csv
+```
+
+Sign-in comes from `IMPORT_LOGIN` and `IMPORT_PASSWORD` (a School Admin or Super Admin) in the
+environment or `backend/.env`, never the command line; `API_URL` defaults to
+`http://localhost:3000/api/v1`. Options: `--sheet <name>`, `--year <academicYearId>`.
+
+The dry run lists problems by sheet row and saves nothing; `--commit` imports only when every
+row passes and writes the logins with first passwords to a CSV (ignored by git). Rows whose
+admission number starts with EXAMPLE (the template's examples) are always left out.
+
 **Sensitivity tiers.** Changes follow the architecture document:
 
 | Tier | Behaviour | Examples |

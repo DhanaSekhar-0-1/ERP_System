@@ -102,6 +102,11 @@ then hiding the parent login and unused modules, hosting, and a device test. Alo
 3. Try real cards on an NFC phone.
 4. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
 
+Done 2026-11-10: Excel import script, `npm run import:students` (template, dry run with
+sheet row numbers, commit with a logins CSV). Tested end to end against the local API: date
+and number cells, blank lines, example rows left in, a blocked commit, re-runs skipping
+students already imported, and a sign-in with a printed first password.
+
 Done 2026-11-10: MVP1 student registration (step 4). `POST /students` takes the agreed form;
 `POST /students/import` checks or imports Excel rows; students sign in with the admission
 number; a generated first password must be changed before any other route works;

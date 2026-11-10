@@ -232,6 +232,14 @@ required.
   2026-06-12; gender as M/F; one column holds Aadhaar or, when not issued, the slip number. Up to
   500 rows a call; the response lists problem rows, rows already registered (skipped) and, after
   a real run, each login with its first password.
+- **Script (built):** `npm run import:students` in `backend`. `--template` writes a blank
+  sheet with the right columns, two example rows and a "How to fill" sheet; `--file` runs a dry
+  run and lists problems by **sheet row number**; adding `--commit` imports (only when no row
+  has a problem) and writes each login and first password to a CSV. It reads .xlsx or .csv,
+  real Excel date cells and numbers typed as numbers, skips blank lines, accepts common heading
+  variants (Adm No, DOB, Surname, Aadhar), checks duplicates across the whole file, and always
+  leaves out the template's example rows (admission numbers starting with EXAMPLE). The logins
+  file holds first passwords: hand them out, then delete it (git ignores it).
 - **Pilot:** no screen. A script run by the developer sends the school's Excel file to the
   import endpoint: a dry run lists problem rows (for example "Row 14: parent mobile has 9
   digits"), the school fixes the sheet, then the real run creates the records. Re-running skips
