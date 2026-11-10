@@ -164,6 +164,8 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
       await store.save(null);
     },
     context: () => call<UserContext>('GET', '/auth/context'),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      call<{ changed: boolean }>('POST', '/auth/change-password', { currentPassword, newPassword }),
 
     principalDashboard: () => call<PrincipalDashboard>('GET', '/dashboards/principal'),
     attendanceTrend: (from: string, to: string) =>

@@ -142,6 +142,7 @@ by the School Admin applies at once.
 
 | Feature | API | Screen |
 |---|---|---|
+| Choose own password after signing in with the first password | Done | Done (web); checked in the mobile web preview |
 | My classes: own subjects and class-teacher sections | Done | Done (web); Built, unverified (mobile) |
 | Daily attendance, only as class teacher of the section | Done | Done (web); Built, unverified (mobile) |
 | NFC or typed card attendance | Done | Built, unverified (mobile); no real card tried |
@@ -167,6 +168,7 @@ year, not only the current one.
 
 | Feature | API | Screen |
 |---|---|---|
+| Choose own password after signing in with the school's first password | Done | Built (mobile; checked in the web preview) |
 | Own attendance by month | Done | Built, unverified (mobile) |
 | Released results and report cards | Done | Built, unverified (mobile) |
 | Request leave | Done | Built, unverified (mobile) |

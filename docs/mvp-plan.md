@@ -222,8 +222,8 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 3 | Database changes for teacher and student fields, and moving existing records over | Done 2026-11-10 (migration `20261110100000_mvp1_registration_fields`) |
 | 4 | Student creation: admission-number login, first password, forced change, import endpoint with a dry run | Done 2026-11-10 |
 | 5 | Teacher registration: app-made ID, subjects | Done 2026-11-10 |
-| 5a | "Choose a new password" screen in the web and phone apps (the server already blocks other routes until the first password changes) | Next |
-| 6 | Teacher check-in and the Admin attendance dashboard | |
+| 5a | "Choose a new password" screen in the web and phone apps (the server already blocks other routes until the first password changes) | Done 2026-11-10 |
+| 6 | Teacher check-in and the Admin attendance dashboard | Next |
 | 7 | Leave screens on web and phone | |
 | 8 | Hide parent login and unused modules; host; Android build; device test | |
 

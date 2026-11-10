@@ -18,6 +18,8 @@ export interface UserContext {
   staffId: string | null;
   studentId: string | null;
   guardianId: string | null;
+  /** Still on a generated first password: the apps show only the choose-a-new-password screen. */
+  mustChangePassword: boolean;
 }
 
 export interface StudentName {

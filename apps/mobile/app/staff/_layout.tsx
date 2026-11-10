@@ -6,6 +6,7 @@ import { tabIcon } from '../../src/ui';
 export default function StaffLayout() {
   const { user, loading } = useAuth();
   if (!loading && !user) return <Redirect href="/login" />;
+  if (user?.mustChangePassword) return <Redirect href="/new-password" />;
   return (
     <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: colors.primary }}>
       <Tabs.Screen

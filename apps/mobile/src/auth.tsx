@@ -8,6 +8,8 @@ interface Auth {
   loading: boolean;
   signIn(identifier: string, password: string): Promise<void>;
   signOut(): Promise<void>;
+  /** Reads who is signed in again, for example after the first password is changed. */
+  refresh(): Promise<void>;
 }
 
 const AuthContext = createContext<Auth | null>(null);
@@ -44,6 +46,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signOut() {
         await api.logout();
         clearSession(client);
+      },
+      async refresh() {
+        client.setQueryData(['context'], await api.context());
       },
     }),
     [client, data, isLoading],

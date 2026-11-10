@@ -102,12 +102,19 @@ then hiding the parent login and unused modules, hosting, and a device test. Alo
 3. Try real cards on an NFC phone.
 4. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
 
+Done 2026-11-10: "Choose your own password" screen in the web and phone apps (step 5a). After a
+sign-in with a first password the app shows only this screen until the password is changed,
+then continues to the person's normal screens. The same rules on both (at least 8 characters,
+a letter and a number, different from the first password, typed twice) come from
+`newPasswordProblem` in `packages/shared`. Checked in the browser on web (teacher T26A24) and in
+the phone app's web preview (teacher T26A25).
+
 Done 2026-11-10: MVP1 teacher registration (step 5). `POST /staff` takes the MVP1 form, makes
 the Teacher ID (T26A05) from the school's counter and a random first password shown once, and
 checks subjects against the school's list; teachers sign in with the Teacher ID (or email). Web
 Teachers page dialog rebuilt and checked in the browser (registered T26A23). Login screens now
-say "Admission number, Teacher ID or email". Not built yet: a "choose a new password" screen in
-the apps, so a first sign-in can only change the password through the API.
+say "Admission number, Teacher ID or email". The "choose a new password" screen
+followed the same day (below).
 
 Done 2026-11-10: stricter registration checks after testing with 8 correct and 44 wrong or
 manipulated rows: names in English letters only, no impossible dates, 14-digit minimum for
