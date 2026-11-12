@@ -388,7 +388,9 @@ async function main() {
   await expect('second teacher sets a password', raviFirst, 'POST', '/auth/change-password', { currentPassword: raviT.firstPassword, newPassword: `RaviT#${RUN}` });
   const raviToken = (await call(null, 'POST', '/auth/login', { identifier: raviT.teacherId, password: `RaviT#${RUN}` })).data?.session?.access_token;
   const lateIn = (await expect('second teacher checks in after the late time', raviToken, 'POST', '/staff-attendance/check-in', near(5), 201)).data;
-  check('recorded as Late', lateIn?.status === 'LATE', lateIn);
+  // Late means after the late time; a check-in at exactly 00:00 (a run crossing midnight) is on time.
+  const expectLate = lateIn?.checkInTime !== '00:00' ? 'LATE' : 'PRESENT';
+  check('recorded as Late (after the late time)', lateIn?.status === expectLate, lateIn);
   await expect('School Admin puts the late time back to 09:15', admin, 'PUT', '/staff-attendance/settings', { lateAfter: '09:15' });
 
   // The school's view and corrections.
@@ -396,8 +398,8 @@ async function main() {
   const todayView = (await expect('School Admin sees teachers today', admin, 'GET', '/staff-attendance')).data;
   const rowOf = (view, staffId) => view?.teachers?.find((t) => t.staffId === staffId);
   check('checked-in teacher shows Present with times', rowOf(todayView, lakshmi.id)?.status === 'PRESENT' && rowOf(todayView, lakshmi.id)?.record?.checkOutTime, rowOf(todayView, lakshmi.id));
-  check('late teacher shows Late', rowOf(todayView, raviT.id)?.status === 'LATE');
-  check('summary counts the day', todayView?.isToday === true && todayView?.summary?.total >= 2 && todayView?.summary?.present >= 1 && todayView?.summary?.late >= 1, todayView?.summary);
+  check('late teacher shows Late', rowOf(todayView, raviT.id)?.status === expectLate);
+  check('summary counts the day', todayView?.isToday === true && todayView?.summary?.total >= 2 && todayView?.summary?.present + todayView?.summary?.late >= 2, todayView?.summary);
   await expect('Principal can see teachers today', principal, 'GET', '/staff-attendance');
   const testTeacherStaff = (await call(admin, 'GET', '/staff')).data?.find((x) => x.user.email === creds.teacher.email);
   const yesterday = day(-1);
@@ -425,6 +427,27 @@ async function main() {
   const profile = (await expect('School Admin opens a student', admin, 'GET', `/attendance-dashboard/students/${newStudent.id}`)).data;
   check('student profile has details, masked Aadhaar and years', profile?.admissionNo === `E2E-${RUN}` && profile?.aadhaarMasked?.startsWith('XXXX') && !('aadhaarEncrypted' in (profile ?? {})) && Array.isArray(profile?.years), profile && { ...profile, years: profile.years?.length });
   await expect('another student cannot open this profile', student, 'GET', `/attendance-dashboard/students/${newStudent.id}`, undefined, 403);
+
+  heading('Teacher leave: half days and no limits');
+  // A school day (not Sunday) a few days ahead, so the checks do not depend on today.
+  let leaveDay = 4;
+  while (new Date(`${day(leaveDay)}T00:00:00Z`).getUTCDay() === 0) leaveDay += 1;
+  const halfDate = day(leaveDay);
+  await expect('a half day must be one date', raviToken, 'POST', '/staff-leaves', { leaveType: 'CASUAL', fromDate: halfDate, toDate: day(leaveDay + 1), session: 'MORNING', reason: 'Doctor visit' }, 400);
+  const halfDay = (await expect('teacher asks for a morning half day', raviToken, 'POST', '/staff-leaves', { leaveType: 'CASUAL', fromDate: halfDate, toDate: halfDate, session: 'MORNING', reason: 'Doctor visit' }, 201)).data;
+  check('a half day counts 0.5', halfDay?.days === 0.5 && halfDay?.session === 'MORNING', halfDay);
+  await expect('School Admin cannot approve teacher leave', admin, 'POST', `/staff-leaves/${halfDay?.id}/approve`, {}, 403);
+  await expect('Principal approves the half day', principal, 'POST', `/staff-leaves/${halfDay?.id}/approve`, {});
+  const awayFrom = (await expect('School Admin lists approved leave from that date', admin, 'GET', `/staff-leaves?status=APPROVED&from=${halfDate}&to=${halfDate}`)).data;
+  check('the half day is in the approved list', awayFrom?.some((l) => l.id === halfDay?.id), awayFrom?.length);
+  const halfView = (await expect('teacher attendance for that day', admin, 'GET', `/staff-attendance?date=${halfDate}`)).data;
+  const raviHalf = halfView?.teachers?.find((t) => t.staffId === raviT.id);
+  check('the dashboard shows the morning half, not full-day leave', raviHalf?.leaveSession === 'MORNING' && raviHalf?.status !== 'ON_LEAVE', raviHalf);
+  const noLimit = (await expect('three sick days with no allowance set (no limits in MVP1)', raviToken, 'POST', '/staff-leaves', { leaveType: 'SICK', fromDate: day(leaveDay + 7), toDate: day(leaveDay + 9), reason: 'Fever' }, 201)).data;
+  check('leave days counted', noLimit?.days >= 2, noLimit?.days);
+  await expect('teacher cancels the pending request', raviToken, 'POST', `/staff-leaves/${noLimit?.id}/cancel`);
+  const studentAway = await expect('School Admin lists student leave from today', admin, 'GET', `/student-leaves?status=APPROVED&from=${day(0)}`);
+  check('student leave list accepts the date filter', Array.isArray(studentAway.data), studentAway.data);
 
   heading('Students, enrollment, guardians (continued)');
   const visible = (await call(teacher, 'GET', '/students?search=TEST-STUDENT-001')).data;

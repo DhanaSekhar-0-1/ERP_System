@@ -7,6 +7,7 @@ import { AttendancePage } from './pages/AttendancePage';
 import { ClassDetailPage } from './pages/ClassDetailPage';
 import { ClassesPage } from './pages/ClassesPage';
 import { ExamsPage } from './pages/ExamsPage';
+import { LeaderLeavePage, TeacherLeavePage } from './pages/LeavePages';
 import { LoginPage } from './pages/LoginPage';
 import { MobileOnlyPage } from './pages/MobileOnlyPage';
 import { NewPasswordPage } from './pages/NewPasswordPage';
@@ -52,6 +53,7 @@ export function App() {
           <Route path="students" element={<StudentsPage />} />
           <Route path="students/:studentId" element={<StudentDetailPage />} />
           <Route path="attendance" element={<AttendancePage />} />
+          <Route path="leave" element={<LeaderLeavePage />} />
           <Route path="approvals" element={<ApprovalsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
@@ -70,6 +72,7 @@ export function App() {
           <Route path="marks" element={<MarksListPage />} />
           <Route path="marks/:assessmentId" element={<MarkSheetPage />} />
           <Route path="slip-tests" element={<SlipTestPage />} />
+          <Route path="leave" element={<TeacherLeavePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

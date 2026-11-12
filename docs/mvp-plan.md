@@ -192,6 +192,14 @@ Any step can send it back with a reason; the family can cancel while it is pendi
   checks in as usual and may check out early. The dashboard shows "Half day (morning)" or
   "Half day (afternoon)".
 - Half days are for teachers only in MVP1; student leave stays full days.
+- **Built (2026-11-13):** `staff_leaves.session` and fractional `days` (migration
+  `20261112100000_staff_leave_half_days`); the balance rule only applies when school settings
+  metadata has `leave.enforceBalance: true`; `from`/`to` filters on both leave lists. Web: a
+  Leave page for leaders (teacher requests with Approve/Reject for the Principal, who is away
+  today and coming days, student requests waiting) and for teachers (request with full or half
+  day, my leave with cancel, student requests to approve or reject). Phone: "Ask for leave" and
+  "My leave" on the teacher Leave tab, above student requests. Half days show on the attendance
+  dashboard, and a morning half day is never marked late at check-in.
 
 ### Teacher attendance (MVP1, decided 2026-11-10)
 
@@ -294,8 +302,8 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 5a | "Choose a new password" screen in the web and phone apps (the server already blocks other routes until the first password changes) | Done 2026-11-10 |
 | 6a | Teacher check-in and check-out (location, late time, Admin corrections, settings) | Done 2026-11-10 |
 | 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | Done 2026-11-10 |
-| 7 | Leave (decided 2026-11-12, see "Leave" in section 3): teacher request on phone and web with half days; Principal decides teacher leave on the web; class teacher decides student leave on the web too; Admin sees approved leave; no leave limits in MVP1 | In progress |
-| 8 | Hide parent login and unused modules; host; Android build; device test | |
+| 7 | Leave (decided 2026-11-12, see "Leave" in section 3): teacher request on phone and web with half days; Principal decides teacher leave on the web; class teacher decides student leave on the web too; Admin sees approved leave; no leave limits in MVP1 | Done 2026-11-13 |
+| 8 | Hide parent login and unused modules; host; Android build; device test | Next (resume here) |
 
 Admin and Super Admin work on the **web**; the phone app is for teachers and students.
 

@@ -125,7 +125,7 @@ Oversight and final approval.
 | Release approved exam sections, one at a time or all approved at once; send back | Done | Done (web) |
 | Approve Tier 3 changes; give the Principal's approval on Tier 4 | Done | Done (web) |
 | Approve fee discounts and fee structures: the only role that can, never its own request | Done | Not built |
-| Staff leave decisions (only the Principal; a rejection needs a reason); student leave | Done | Not built |
+| Staff leave decisions (only the Principal; a rejection needs a reason); student leave | Done | Done (web Leave page) |
 | Timetables and substitutes | Done | Not built |
 | Complaints, announcements, homework | Done | Not built |
 | Audit logs, reports, analytics | Done | Not built |
@@ -156,7 +156,9 @@ by the School Admin applies at once.
 | Mark corrections after submission (Tier 3) or release (Tier 4) | Done | Not built |
 | Homework: create, publish, grade, return | Done | Not built |
 | View assigned students (registering students is for the School Admin and Super Admin since 2026-11-10) | Done | Not built |
-| Own timetable, substitute duties, own leave | Done | Not built |
+| Own leave: request (full or half day), see decisions and reasons, cancel while pending | Done | Done (web); Built, unverified (mobile) |
+| Decide student leave as class teacher | Done | Done (web); Built, unverified (mobile) |
+| Own timetable, substitute duties | Done | Not built |
 
 **Cannot do:** edit student details, change classes, sections, subjects or assignments, or
 mark attendance for a section where they are not the class teacher.
@@ -264,8 +266,8 @@ requests and Aadhaar Reveal; fee screens in MVP3.
 
 ## What comes next
 
-The MVP1 build order is in [mvp-plan.md](./mvp-plan.md#5-mvp1-build-order); steps 1–6b are done
-and step 7 (leave screens) is next. Where to resume: [STATUS.md section 0](../STATUS.md#0-resume-here-stopped-2026-11-10-end-of-day).
+The MVP1 build order is in [mvp-plan.md](./mvp-plan.md#5-mvp1-build-order); steps 1–7 are done
+and step 8 is next. Where to resume: [STATUS.md section 0](../STATUS.md#0-resume-here-stopped-2026-11-10-end-of-day).
 Alongside it:
 
 1. Change the passwords that are readable in the repository's history.

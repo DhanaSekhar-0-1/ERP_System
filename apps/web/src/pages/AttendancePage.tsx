@@ -145,7 +145,10 @@ function TeachersToday({ date }: { date: string }) {
                     </td>
                     <td className="py-2.5 tabular-nums">{row.record?.checkInTime ?? '—'}</td>
                     <td className="py-2.5 tabular-nums">{row.record?.checkOutTime ?? '—'}</td>
-                    <td className="py-2.5 text-xs text-muted">{row.record?.corrected ? `Corrected: ${row.record.correctionReason}` : ''}</td>
+                    <td className="py-2.5 text-xs text-muted">
+                      {row.leaveSession === 'MORNING' ? 'Half day (morning) ' : row.leaveSession === 'AFTERNOON' ? 'Half day (afternoon) ' : ''}
+                      {row.record?.corrected ? `Corrected: ${row.record.correctionReason}` : ''}
+                    </td>
                     {canCorrect && (
                       <td className="py-2.5 text-right">
                         <button type="button" onClick={() => setCorrecting(row)} className="rounded-lg px-2 py-1 text-xs font-bold text-brand hover:bg-brand-soft">

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BookOpenCheck,
   CalendarCheck,
+  CalendarOff,
   ClipboardList,
   FilePen,
   GraduationCap,
@@ -46,6 +47,7 @@ const LEADER_NAV: { title?: string; items: NavItem[] }[] = [
     title: 'Daily',
     items: [
       { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
+      { to: '/leave', label: 'Leave', icon: CalendarOff },
       { to: '/approvals', label: 'Approvals', icon: ShieldCheck },
     ],
   },
@@ -59,6 +61,7 @@ const TEACHER_NAV: { title?: string; items: NavItem[] }[] = [
       { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
       { to: '/marks', label: 'Marks entry', icon: FilePen },
       { to: '/slip-tests', label: 'Slip tests', icon: ClipboardList },
+      { to: '/leave', label: 'Leave', icon: CalendarOff },
     ],
   },
 ];

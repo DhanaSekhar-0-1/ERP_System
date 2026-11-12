@@ -135,6 +135,35 @@ export interface StudentLeave {
   student: { id: string; firstName: string; lastName: string | null; admissionNo?: string };
 }
 
+export type StaffLeaveType = 'CASUAL' | 'SICK' | 'EARNED' | 'UNPAID';
+/** Full day, or the morning or afternoon half of a single day. */
+export type LeaveSession = 'FULL_DAY' | 'MORNING' | 'AFTERNOON';
+
+export interface StaffLeave {
+  id: string;
+  leaveType: StaffLeaveType;
+  fromDate: string;
+  toDate: string;
+  /** School days covered; 0.5 for a half day. */
+  days: number;
+  session: LeaveSession;
+  reason: string;
+  status: LeaveStatus;
+  decisionNote: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  staff: { id: string; employeeNo: string; user: { id: string; displayName: string } };
+}
+
+/** Filters for leave lists; `from`/`to` keep leave that overlaps the window. */
+export interface LeaveQuery {
+  status?: LeaveStatus;
+  from?: string;
+  to?: string;
+  staffId?: string;
+  studentId?: string;
+}
+
 export interface ApprovalRequest {
   id: string;
   type: string;
@@ -411,6 +440,8 @@ export interface StaffAttendanceToday {
   date: string;
   record: StaffAttendanceRecord | null;
   onLeave: boolean;
+  /** MORNING or AFTERNOON when the teacher has an approved half day today. */
+  halfDayLeave: 'MORNING' | 'AFTERNOON' | null;
   lateAfter: string;
   radiusMeters: number;
   locationReady: boolean;
@@ -435,6 +466,7 @@ export interface StaffAttendanceRow {
   status: StaffAttendanceStatus | 'NOT_CHECKED_IN';
   record: StaffAttendanceRecord | null;
   leaveType: string | null;
+  leaveSession: LeaveSession | null;
 }
 
 export interface StaffAttendanceDay {

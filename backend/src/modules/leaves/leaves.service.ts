@@ -95,6 +95,7 @@ export class LeavesService {
           {
             ...(query.status ? { status: query.status } : {}),
             ...(query.studentId ? { studentId: query.studentId } : {}),
+            ...this.dateWindow(query),
           },
         ],
       },
@@ -221,8 +222,13 @@ export class LeavesService {
       throw new ForbiddenException('Only staff members can request staff leave');
     }
     const { from, to } = this.range(input.fromDate, input.toDate);
-    const days = schoolDays(from, to).length;
-    if (!days) throw new BadRequestException('The range has no school days');
+    const session = input.session ?? 'FULL_DAY';
+    const schoolDayCount = schoolDays(from, to).length;
+    if (!schoolDayCount) throw new BadRequestException('The range has no school days');
+    if (session !== 'FULL_DAY' && from.getTime() !== to.getTime()) {
+      throw new BadRequestException('A half day must be a single date');
+    }
+    const days = session === 'FULL_DAY' ? schoolDayCount : 0.5;
     const overlap = await this.database.staffLeave.findFirst({
       where: {
         staffId: context.staffId,
@@ -232,7 +238,9 @@ export class LeavesService {
       },
     });
     if (overlap) throw new ConflictException('A leave request already covers these dates');
-    if (input.leaveType !== 'UNPAID') {
+    // MVP1: no leave limits; the Principal decides each request. Schools can turn the
+    // balance rule on later with school settings metadata `leave.enforceBalance: true`.
+    if (input.leaveType !== 'UNPAID' && (await this.enforcesBalance(context.schoolId))) {
       const balance = await this.balanceFor(context.schoolId, context.staffId, from);
       const remaining = balance.find((row) => row.leaveType === input.leaveType)?.remaining ?? 0;
       if (days > remaining) {
@@ -249,6 +257,7 @@ export class LeavesService {
         fromDate: from,
         toDate: to,
         days,
+        session,
         reason: input.reason.trim(),
       },
       include: this.staffInclude(),
@@ -257,7 +266,10 @@ export class LeavesService {
     await this.notify.toRoles(context.schoolId, [ROLE.PRINCIPAL], {
       type: 'staff-leave.requested',
       title: 'Staff leave request',
-      body: `${context.displayName} requested ${days} day(s) ${input.leaveType.toLowerCase()} leave`,
+      body:
+        session === 'FULL_DAY'
+          ? `${context.displayName} requested ${days} day(s) ${input.leaveType.toLowerCase()} leave`
+          : `${context.displayName} requested a ${session === 'MORNING' ? 'morning' : 'afternoon'} half day of ${input.leaveType.toLowerCase()} leave`,
       data: { staffLeaveId: leave.id },
     });
     return leave;
@@ -271,6 +283,7 @@ export class LeavesService {
         ...(context.isLeader ? {} : { staffId: context.staffId ?? '00000000-0000-0000-0000-000000000000' }),
         ...(query.status ? { status: query.status } : {}),
         ...(query.staffId ? { staffId: query.staffId } : {}),
+        ...this.dateWindow(query),
       },
       orderBy: { fromDate: 'desc' },
       include: this.staffInclude(),
@@ -544,6 +557,22 @@ export class LeavesService {
     if (leave.requestedById !== context.userId) {
       throw new ForbiddenException('Only the requester can change this request');
     }
+  }
+
+  /** Leave overlapping a window: ending on or after `from`, starting on or before `to`. */
+  private dateWindow(query: LeaveQueryDto) {
+    return {
+      ...(query.from ? { toDate: { gte: new Date(query.from.slice(0, 10)) } } : {}),
+      ...(query.to ? { fromDate: { lte: new Date(query.to.slice(0, 10)) } } : {}),
+    };
+  }
+
+  private async enforcesBalance(schoolId: string): Promise<boolean> {
+    const settings = await this.database.schoolSettings.findUnique({
+      where: { schoolId },
+      select: { metadata: true },
+    });
+    return (settings?.metadata as { leave?: { enforceBalance?: boolean } } | null)?.leave?.enforceBalance === true;
   }
 
   private range(fromValue: string, toValue: string) {

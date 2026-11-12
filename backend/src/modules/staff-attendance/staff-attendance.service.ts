@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, StaffAttendance } from '@prisma/client';
+import { LeaveSession, Prisma, StaffAttendance } from '@prisma/client';
 import { DatabaseService } from '../../common/database/database.service';
 import { SupabaseUser } from '../../common/auth/supabase-user.interface';
 import { AccessService, SchoolContext } from '../../common/access/access.service';
@@ -117,16 +117,18 @@ export class StaffAttendanceService {
     const context = await this.teacher(authUser);
     const rules = await this.rules(context.schoolId);
     const { date } = schoolNow(rules.timeZone);
-    const [record, onLeave] = await Promise.all([
+    const [record, leave] = await Promise.all([
       this.database.staffAttendance.findUnique({
         where: { staffId_date: { staffId: context.staffId, date: new Date(date) } },
       }),
-      this.onApprovedLeave(context.staffId, date),
+      this.approvedLeave(context.staffId, date),
     ]);
     return {
       date,
       record: record ? this.view(record, rules.timeZone) : null,
-      onLeave,
+      onLeave: leave === 'FULL_DAY',
+      /** MORNING or AFTERNOON when the teacher has an approved half day today. */
+      halfDayLeave: leave === 'MORNING' || leave === 'AFTERNOON' ? leave : null,
       lateAfter: rules.lateAfter,
       radiusMeters: rules.radiusMeters,
       locationReady: rules.locationReady,
@@ -139,7 +141,8 @@ export class StaffAttendanceService {
     const distance = this.assertAtSchool(rules, input);
     const now = new Date();
     const { date, time } = schoolNow(rules.timeZone, now);
-    if (await this.onApprovedLeave(context.staffId, date)) {
+    const leave = await this.approvedLeave(context.staffId, date);
+    if (leave === 'FULL_DAY') {
       throw new ConflictException('You are on approved leave today');
     }
     const existing = await this.database.staffAttendance.findUnique({
@@ -153,7 +156,8 @@ export class StaffAttendanceService {
     if (existing) {
       throw new ConflictException(`Today is already recorded as ${this.label(existing.status)}; ask the School Admin`);
     }
-    const status = time > rules.lateAfter ? 'LATE' : 'PRESENT';
+    // On a morning half day the teacher arrives after lunch, so the late time does not apply.
+    const status = leave !== 'MORNING' && time > rules.lateAfter ? 'LATE' : 'PRESENT';
     const record = await this.database.staffAttendance.create({
       data: {
         schoolId: context.schoolId,
@@ -235,7 +239,7 @@ export class StaffAttendanceService {
         attendance: { where: { date: day } },
         leaves: {
           where: { status: 'APPROVED', fromDate: { lte: day }, toDate: { gte: day } },
-          select: { leaveType: true },
+          select: { leaveType: true, session: true },
           take: 1,
         },
       },
@@ -243,9 +247,10 @@ export class StaffAttendanceService {
     });
     const rows = teachers.map((teacher) => {
       const record = teacher.attendance[0];
+      const leave = teacher.leaves[0];
       const status: DayStatus = record
         ? record.status
-        : teacher.leaves.length
+        : leave?.session === 'FULL_DAY'
           ? 'ON_LEAVE'
           : date < today
             ? 'ABSENT'
@@ -258,7 +263,9 @@ export class StaffAttendanceService {
         subjects: teacher.teachingSubjects,
         status,
         record: record ? this.view(record, rules.timeZone) : null,
-        leaveType: teacher.leaves[0]?.leaveType ?? null,
+        leaveType: leave?.leaveType ?? null,
+        /** FULL_DAY, MORNING or AFTERNOON when the teacher has approved leave that day. */
+        leaveSession: leave?.session ?? null,
       };
     });
     const count = (status: DayStatus) => rows.filter((row) => row.status === status).length;
@@ -357,13 +364,14 @@ export class StaffAttendanceService {
     return distance;
   }
 
-  private async onApprovedLeave(staffId: string, date: string): Promise<boolean> {
+  /** The session of the teacher's approved leave on a date, or null when there is none. */
+  private async approvedLeave(staffId: string, date: string): Promise<LeaveSession | null> {
     const day = new Date(date);
     const leave = await this.database.staffLeave.findFirst({
       where: { staffId, status: 'APPROVED', fromDate: { lte: day }, toDate: { gte: day } },
-      select: { id: true },
+      select: { session: true },
     });
-    return Boolean(leave);
+    return leave?.session ?? null;
   }
 
   private view(record: StaffAttendance, timeZone: string) {

@@ -144,6 +144,13 @@ enum LeaveStatus {
   CANCELLED
 }
 
+/// Which part of the day a teacher's leave covers. Half days are a single date and count 0.5.
+enum LeaveSession {
+  FULL_DAY
+  MORNING
+  AFTERNOON
+}
+
 enum StaffLeaveType {
   CASUAL
   SICK
@@ -1121,7 +1128,9 @@ model StaffLeave {
   leaveType    StaffLeaveType      @map("leave_type")
   fromDate     DateTime            @map("from_date") @db.Date
   toDate       DateTime            @map("to_date") @db.Date
-  days         Int
+  /// School days covered; 0.5 for a half day.
+  days         Float
+  session      LeaveSession        @default(FULL_DAY)
   reason       String
   status       LeaveStatus         @default(PENDING)
   decidedById  String?             @map("decided_by_id") @db.Uuid

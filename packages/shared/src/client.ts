@@ -34,6 +34,10 @@ import type {
   AttendanceDashboardDay,
   DashboardSectionStudents,
   DeviceLocation,
+  LeaveQuery,
+  LeaveSession,
+  StaffLeave,
+  StaffLeaveType,
   StudentAttendanceProfile,
   Gender,
   RegisteredTeacher,
@@ -215,8 +219,22 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
       call<StudentLeave[]>('GET', `/student-leaves${query({ status })}`),
     requestLeave: (input: { studentId: string; fromDate: string; toDate: string; reason: string }) =>
       call<StudentLeave>('POST', '/student-leaves', input),
-    decideLeave: (leaveId: string, decision: 'approve' | 'reject') =>
-      call<StudentLeave>('POST', `/student-leaves/${leaveId}/${decision}`, {}),
+    decideLeave: (leaveId: string, decision: 'approve' | 'reject', note?: string) =>
+      call<StudentLeave>('POST', `/student-leaves/${leaveId}/${decision}`, note ? { note } : {}),
+    studentLeaveList: (filters: LeaveQuery = {}) =>
+      call<StudentLeave[]>('GET', `/student-leaves${query({ ...filters })}`),
+
+    staffLeaves: (filters: LeaveQuery = {}) => call<StaffLeave[]>('GET', `/staff-leaves${query({ ...filters })}`),
+    requestStaffLeave: (input: {
+      leaveType: StaffLeaveType;
+      fromDate: string;
+      toDate: string;
+      session?: LeaveSession;
+      reason: string;
+    }) => call<StaffLeave>('POST', '/staff-leaves', input),
+    decideStaffLeave: (leaveId: string, decision: 'approve' | 'reject', note?: string) =>
+      call<StaffLeave>('POST', `/staff-leaves/${leaveId}/${decision}`, note ? { note } : {}),
+    cancelStaffLeave: (leaveId: string) => call<StaffLeave>('POST', `/staff-leaves/${leaveId}/cancel`),
 
     approvals: () => list<ApprovalRequest>(`/approval-requests${query({ status: 'PENDING' })}`),
     decideApproval: (requestId: string, decision: 'approve' | 'reject') =>
