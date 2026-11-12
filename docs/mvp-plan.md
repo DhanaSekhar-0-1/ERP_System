@@ -171,6 +171,28 @@ Any step can send it back with a reason; the family can cancel while it is pendi
   sends a notification to its audience.
 - Only Super Admin, Principal and Admin post emergencies, which stay pinned in red.
 
+### Leave (MVP1, decided 2026-11-12)
+
+- **Teacher leave** is requested on the **phone and the web**: type (casual, sick, earned,
+  unpaid), dates, reason, and for a single day **full day, morning half or afternoon half**
+  ("evening" means the afternoon half of the school day). A half day counts as 0.5 days and can
+  only be one date.
+- **No leave limits in MVP1:** leave is recorded and the Principal decides each request;
+  balances are not checked and not shown. The balance rules stay in the code behind a school
+  setting (off by default) for later.
+- **The Principal decides** teacher leave on the web: approve, or reject with a reason. The
+  teacher is notified and sees the result and the reason.
+- **Student leave** is requested by the student or family on the phone. The **class teacher**
+  decides it on the **phone and the web** (teacher area). The Admin and Principal can view
+  student leave on the web; they do not need to decide it.
+- **The Admin sees approved leave** (teachers and students, today and the coming days) on the
+  web, so cover can be arranged. Pending requests are visible to the Principal.
+- **With check-in:** a teacher on full-day leave cannot check in. On a **morning half day** the
+  teacher checks in after lunch and is not marked late; on an **afternoon half day** the teacher
+  checks in as usual and may check out early. The dashboard shows "Half day (morning)" or
+  "Half day (afternoon)".
+- Half days are for teachers only in MVP1; student leave stays full days.
+
 ### Teacher attendance (MVP1, decided 2026-11-10)
 
 Teachers check in and check out on the phone app. NFC check-in can come later.
@@ -238,7 +260,7 @@ Attendance, registering people, and leave.
 6. Teacher check-in and check-out on the phone, only at school (location), with a late time.
 7. Admin dashboard: today's attendance by class and section, overall %, teachers present, a
    student details page.
-8. Leave: student to class teacher (built); teacher to Principal only (built 2026-11-10).
+8. Leave: student to class teacher (phone and web); teacher to Principal only (phone and web, half days allowed); no leave limits in MVP1.
 9. Hide the parent login and every module not listed here.
 10. Test the phone app by hand on real devices.
 
@@ -272,7 +294,7 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 5a | "Choose a new password" screen in the web and phone apps (the server already blocks other routes until the first password changes) | Done 2026-11-10 |
 | 6a | Teacher check-in and check-out (location, late time, Admin corrections, settings) | Done 2026-11-10 |
 | 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | Done 2026-11-10 |
-| 7 | Leave screens on web and phone: teacher's own leave request (phone), Principal decides teacher leave (web, reason to reject), Admin sees approved leaves (web). Student leave request and class-teacher decision already exist on the phone | Next (resume here) |
+| 7 | Leave (decided 2026-11-12, see "Leave" in section 3): teacher request on phone and web with half days; Principal decides teacher leave on the web; class teacher decides student leave on the web too; Admin sees approved leave; no leave limits in MVP1 | In progress |
 | 8 | Hide parent login and unused modules; host; Android build; device test | |
 
 Admin and Super Admin work on the **web**; the phone app is for teachers and students.
