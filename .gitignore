@@ -12,3 +12,6 @@ node_modules/
 dist/
 coverage/
 *.log
+
+# First passwords printed by npm run pilot:setup (shown once; never commit)
+pilot-first-logins.txt
