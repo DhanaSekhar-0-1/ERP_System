@@ -37,6 +37,14 @@ steps 1–7 are done; **step 8 is next**.
 deleted. Teacher "ravikatari" (42124) is the user's own and must be kept. A trial school "Pilot Trial School" (PILOT-TEST, logins `pilot.*@erp.local`) was made on 2026-11-13 to test `pilot:setup`; it is kept like the rest. Agreed for later: make
 the e2e suite reuse one test parent and deactivate/archive what each run creates.
 
+**Pilot hosting (set up 2026-11-14):** web https://school-erp-tan-zeta.vercel.app (Vercel project
+`school-erp`, root `apps/web`, deploys from `main`); API https://school-erp-api-stf8.onrender.com
+(Render Blueprint `school-erp`, service `school-erp-api`, Free, Singapore, deploys `feature/mvp1`,
+auto-deploy off); database: Supabase project `school-erp-copilot` (`nzvucrhdhxibliytyiwn`, Mumbai),
+public sign-ups off. Local settings in `backend/.env.pilot` (git-ignored). `CORS_ORIGINS` is the
+Vercel address. Not done yet: `npm run pilot:setup` (school and first logins), the APK build.
+`feature/mvp1` was merged into `main` by the user (PR #4).
+
 **MVP1 is built — start here.** Steps 1–8c are done. What remains is the user's own setup and
 testing, in this order: (1) follow [docs/hosting-guide.md](./docs/hosting-guide.md) (Supabase,
 Render, Vercel, `npm run pilot:setup`); (2) build the APK with
