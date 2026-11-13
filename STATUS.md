@@ -30,7 +30,12 @@ steps 1–7 are done; **step 8 is next**.
 | 6a, 6b | Teacher check-in/out at school; Admin attendance dashboard and student details page | `8ba0b80`, `9174298` |
 | 7 | Leave: teacher requests on phone and web with half days, Principal decides on the web, class teachers decide student leave on the web too, Admin sees who is away; no leave limits in MVP1 | this step's commit |
 
-**Step 8 — start here:** hide the parent login and every module not in MVP1 (web and phone);
+**Test data (decided 2026-11-13):** the development database is **not** cleaned; nothing is
+deleted. Teacher "ravikatari" (42124) is the user's own and must be kept. Agreed for later: make
+the e2e suite reuse one test parent and deactivate/archive what each run creates.
+
+**Step 8 — start here** (decisions in docs/mvp-plan.md, "Pilot setup"; split into 8a module
+switches, 8b hosting files and guide, 8c APK and device checklist): hide the parent login and every module not in MVP1 (web and phone);
 host the backend, web and a separate client database for the pilot; Android build; test on a
 real phone (screens, a real check-in at school, NFC cards, leave). Hosting needs decisions from
 the user (provider, domain, who pays); ask before choosing.

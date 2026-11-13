@@ -171,6 +171,26 @@ Any step can send it back with a reason; the family can cancel while it is pendi
   sends a notification to its audience.
 - Only Super Admin, Principal and Admin post emergencies, which stay pinned in red.
 
+### Pilot setup (MVP1 step 8, decided 2026-11-13)
+
+- **Module switches per school** in web Settings, enforced by the server (a switched-off module's
+  screens are hidden and its API refuses requests). MVP1 on: attendance, teacher check-in,
+  student and teacher registration, leave. Off for the pilot: exams and marks (with slip tests,
+  results and report cards), notices and announcements, homework, fees, timetable, transport,
+  library, assets, complaints, certificates, and the **parent login**. A "Use the MVP1 set"
+  button applies this. Schools that never set switches keep everything on, so nothing
+  changes for existing schools or the test suite. Turning on exams for MVP2 is a setting.
+- **NFC card optional** for the demo and pilot (the registration switch `requireNfcCard` off);
+  NFC is tested later by the developer with an NFC reader on the phone's USB (OTG) port. Such
+  readers usually type the card number like a keyboard, so the phone screen must accept a typed
+  card ID.
+- **Hosting:** backend on Render, web on Vercel, and a **new Supabase project** only for the
+  school's real data (never the development database). Accounts and payment are the user's;
+  the developer prepares the configuration files and a step-by-step guide.
+- **Phone app:** an Android **APK shared directly** (link or WhatsApp), built with Expo EAS.
+- **Device test:** the developer tests on their own phone with a checklist (first password,
+  check-in at school, leave, attendance marking; NFC when the reader is connected).
+
 ### Leave (MVP1, decided 2026-11-12)
 
 - **Teacher leave** is requested on the **phone and the web**: type (casual, sick, earned,
@@ -303,7 +323,9 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 6a | Teacher check-in and check-out (location, late time, Admin corrections, settings) | Done 2026-11-10 |
 | 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | Done 2026-11-10 |
 | 7 | Leave (decided 2026-11-12, see "Leave" in section 3): teacher request on phone and web with half days; Principal decides teacher leave on the web; class teacher decides student leave on the web too; Admin sees approved leave; no leave limits in MVP1 | Done 2026-11-13 |
-| 8 | Hide parent login and unused modules; host; Android build; device test | Next (resume here) |
+| 8a | Module switches per school (parent login and non-MVP1 modules off; NFC optional) | Next |
+| 8b | Hosting files and guide: Render (backend), Vercel (web), new Supabase project | |
+| 8c | Android APK (Expo EAS) and the device-test checklist | |
 
 Admin and Super Admin work on the **web**; the phone app is for teachers and students.
 
