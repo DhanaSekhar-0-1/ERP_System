@@ -30,19 +30,21 @@ steps 1–7 are done; **step 8 is next**.
 | 6a, 6b | Teacher check-in/out at school; Admin attendance dashboard and student details page | `8ba0b80`, `9174298` |
 | 7 | Leave: teacher requests on phone and web with half days, Principal decides on the web, class teachers decide student leave on the web too, Admin sees who is away; no leave limits in MVP1 | `1be2665` |
 | 8a | Module switches per school in web Settings (server-enforced; "Use the MVP1 set"; parent login off; Aadhaar/NFC registration switches) | `aa6b221` |
-| 8b | Hosting: `render.yaml` (Render Free, Singapore; migrations, RLS check and role seed run in the build), `apps/web/vercel.json`, `npm run pilot:setup` (school, year, MVP1 switches, first logins) and [docs/hosting-guide.md](./docs/hosting-guide.md) | this step's commit |
+| 8b | Hosting: `render.yaml` (Render Free, Singapore; migrations, RLS check and role seed run in the build), `apps/web/vercel.json`, `npm run pilot:setup` (school, year, MVP1 switches, first logins) and [docs/hosting-guide.md](./docs/hosting-guide.md) | `17e9ea9` |
+| 8c | Android APK: `apps/mobile/eas.json` (`pilot` profile, APK, Render API address), [docs/android-apk-guide.md](./docs/android-apk-guide.md), [docs/device-test-checklist.md](./docs/device-test-checklist.md); the phone scan screen always shows a focused Card ID box that submits on Enter (USB/OTG readers) | this step's commit |
 
 **Test data (decided 2026-11-13):** the development database is **not** cleaned; nothing is
 deleted. Teacher "ravikatari" (42124) is the user's own and must be kept. A trial school "Pilot Trial School" (PILOT-TEST, logins `pilot.*@erp.local`) was made on 2026-11-13 to test `pilot:setup`; it is kept like the rest. Agreed for later: make
 the e2e suite reuse one test parent and deactivate/archive what each run creates.
 
-**Step 8c — start here** (decisions in docs/mvp-plan.md, "Pilot setup"). 8a module switches and
-8b hosting files are done; the user follows [docs/hosting-guide.md](./docs/hosting-guide.md) to
-create the Supabase, Render and Vercel accounts (not done yet). Next, 8c: the Android APK
-(Expo EAS; the phone app's server address must be the Render API) and the device-test checklist
-(first password, check-in at school, leave, attendance; NFC via the OTG reader, so check the
-phone scan screen accepts a typed card ID). Before the pilot: update the packages `npm audit`
-flags.
+**MVP1 is built — start here.** Steps 1–8c are done. What remains is the user's own setup and
+testing, in this order: (1) follow [docs/hosting-guide.md](./docs/hosting-guide.md) (Supabase,
+Render, Vercel, `npm run pilot:setup`); (2) build the APK with
+[docs/android-apk-guide.md](./docs/android-apk-guide.md) (`eas init` adds a `projectId` to
+`apps/mobile/app.json`; commit it); (3) run [docs/device-test-checklist.md](./docs/device-test-checklist.md)
+on a real phone, including NFC with the OTG reader (card numbers must match the reader used at
+registration). Developer tasks before the pilot: update the packages `npm audit` flags, fix
+anything the device test finds, and the agreed e2e tidy-up (reuse one test parent).
 
 **How to run and test** (details in [CMD.md](./CMD.md) and `.claude/launch.json`):
 

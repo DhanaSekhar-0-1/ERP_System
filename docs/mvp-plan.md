@@ -342,7 +342,7 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 7 | Leave (decided 2026-11-12, see "Leave" in section 3): teacher request on phone and web with half days; Principal decides teacher leave on the web; class teacher decides student leave on the web too; Admin sees approved leave; no leave limits in MVP1 | Done 2026-11-13 |
 | 8a | Module switches per school (parent login and non-MVP1 modules off; NFC optional) | Done 2026-11-13 |
 | 8b | Hosting files and guide: Render (backend), Vercel (web), new Supabase project ([hosting-guide.md](./hosting-guide.md), `render.yaml`, `apps/web/vercel.json`, `npm run pilot:setup`) | Done 2026-11-13 |
-| 8c | Android APK (Expo EAS) and the device-test checklist | Next |
+| 8c | Android APK (Expo EAS) and the device-test checklist ([android-apk-guide.md](./android-apk-guide.md), [device-test-checklist.md](./device-test-checklist.md), `apps/mobile/eas.json`; scan screen always takes a typed or USB-reader card ID) | Done 2026-11-13 |
 
 Admin and Super Admin work on the **web**; the phone app is for teachers and students.
 
