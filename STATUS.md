@@ -43,7 +43,7 @@ Render, Vercel, `npm run pilot:setup`); (2) build the APK with
 [docs/android-apk-guide.md](./docs/android-apk-guide.md) (`eas init` adds a `projectId` to
 `apps/mobile/app.json`; commit it); (3) run [docs/device-test-checklist.md](./docs/device-test-checklist.md)
 on a real phone, including NFC with the OTG reader (card numbers must match the reader used at
-registration). Developer tasks before the pilot: update the packages `npm audit` flags, fix
+registration). Developer tasks before the pilot: fix
 anything the device test finds, and the agreed e2e tidy-up (reuse one test parent).
 
 **How to run and test** (details in [CMD.md](./CMD.md) and `.claude/launch.json`):
@@ -67,8 +67,12 @@ anything the device test finds, and the agreed e2e tidy-up (reuse one test paren
 
 **Open items to remember:**
 
-- `npm audit` lists high and critical issues in existing server packages (`multer`,
-  `body-parser`, `proxy-addr`, `handlebars`); update before the pilot goes online.
+- Packages updated 2026-11-13 (`npm audit fix`, no breaking changes): the critical
+  `proxy-addr` and the high `multer`/`@nestjs/platform-express` issues are fixed. Left on purpose:
+  `deepmerge-ts` (high) inside the Prisma 6 CLI config loader, fixed only in Prisma 7, a major
+  upgrade; it runs at build/migrate time, not while the API serves requests. Dev-only build tools
+  (moderate/low) and Expo's build-time `minimatch` (its fix would downgrade Expo to 52) also stay.
+  Revisit with the Prisma 7 upgrade after the pilot.
 - The development database holds many test records from e2e runs (teachers, `QA-…` and
   `SCR-…` students). The test student now has 41 parent links, so every results notification
   goes to ~40 parents; the queue of deliveries can then delay the e2e notification checks
@@ -166,7 +170,7 @@ MVP1 is being built on branch `feature/mvp1`, in the order set in
 leave screens (step 7), then hiding the parent login and unused modules, hosting, and a device
 test (step 8). See section 0 above for where to resume. Alongside it:
 
-1. Update the server packages flagged by `npm audit` (high and critical) before the pilot.
+1. ~~Update the server packages flagged by `npm audit`~~ Done 2026-11-13 (see open items).
 2. Change the test passwords that are readable in the repository history.
 3. A separate client database and hosting for the one-month pilot.
 4. Try real cards on an NFC phone, and a real check-in at school.

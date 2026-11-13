@@ -401,7 +401,12 @@ required.
   what keeps it safe, so it must not be skippable (built: the server refuses every other route,
   and both apps show only the choose-a-new-password screen).
 - A fake-location app can cheat teacher check-in; the dashboard and corrections are the check.
-- Server packages flagged by `npm audit` (high and critical) must be updated before the pilot.
+- Packages updated 2026-11-13 (`npm audit fix`, no breaking changes): the critical
+  `proxy-addr` and the high `multer`/`@nestjs/platform-express` issues are fixed. Left on purpose:
+  `deepmerge-ts` (high) inside the Prisma 6 CLI config loader, fixed only in Prisma 7, a major
+  upgrade; it runs at build/migrate time, not while the API serves requests. Dev-only build tools
+  (moderate/low) and Expo's build-time `minimatch` (its fix would downgrade Expo to 52) also stay.
+  Revisit with the Prisma 7 upgrade after the pilot.
 - Nothing has been tried on a real phone yet: phone screens, check-in at school, NFC cards.
 - Suggested, not yet confirmed: grade instead of percentage, board, "TC pending" and "first
   school" for students new to the school (section 3).
