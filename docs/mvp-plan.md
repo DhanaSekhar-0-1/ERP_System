@@ -195,6 +195,15 @@ Any step can send it back with a reason; the family can cancel while it is pendi
 - **Hosting:** backend on Render, web on Vercel, and a **new Supabase project** only for the
   school's real data (never the development database). Accounts and payment are the user's;
   the developer prepares the configuration files and a step-by-step guide.
+- **Hosting details (decided 2026-11-13, step 8b):** Render **Free** plan for the pilot (it
+  sleeps after 15 idle minutes and the first request then waits about a minute; an optional free
+  uptime ping keeps it awake; Starter at about $7/month removes this). Free default addresses
+  (`*.onrender.com`, `*.vercel.app`); a custom domain can be added later without code changes.
+  Supabase in Mumbai (ap-south-1), Render in Singapore (nearest region).
+- **First accounts on the new database:** one setup script (`npm run pilot:setup`) creates the
+  organisation, the school, the Super Admin, a Principal and a School Admin with first passwords
+  (shown once; changed at first login), and applies the MVP1 module set with the NFC card
+  optional. A web screen for creating Principal/Admin/Accountant accounts is not in MVP1.
 - **Phone app:** an Android **APK shared directly** (link or WhatsApp), built with Expo EAS.
 - **Device test:** the developer tests on their own phone with a checklist (first password,
   check-in at school, leave, attendance marking; NFC when the reader is connected).
@@ -332,8 +341,8 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | Done 2026-11-10 |
 | 7 | Leave (decided 2026-11-12, see "Leave" in section 3): teacher request on phone and web with half days; Principal decides teacher leave on the web; class teacher decides student leave on the web too; Admin sees approved leave; no leave limits in MVP1 | Done 2026-11-13 |
 | 8a | Module switches per school (parent login and non-MVP1 modules off; NFC optional) | Done 2026-11-13 |
-| 8b | Hosting files and guide: Render (backend), Vercel (web), new Supabase project | Next |
-| 8c | Android APK (Expo EAS) and the device-test checklist | |
+| 8b | Hosting files and guide: Render (backend), Vercel (web), new Supabase project ([hosting-guide.md](./hosting-guide.md), `render.yaml`, `apps/web/vercel.json`, `npm run pilot:setup`) | Done 2026-11-13 |
+| 8c | Android APK (Expo EAS) and the device-test checklist | Next |
 
 Admin and Super Admin work on the **web**; the phone app is for teachers and students.
 

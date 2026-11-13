@@ -184,6 +184,10 @@ Per-student views: `/students/:id/{attendance,enrollments,homework,report-cards,
 
 ## Bootstrap accounts
 
+For a school's real (pilot) database, use `npm run pilot:setup -- --env-file=.env.pilot ...`
+instead; see [docs/hosting-guide.md](../docs/hosting-guide.md). The commands below are for
+development and test databases only.
+
 Link an existing Supabase Auth user as Super Admin:
 
 ```powershell
