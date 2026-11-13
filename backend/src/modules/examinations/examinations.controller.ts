@@ -1,3 +1,4 @@
+import { SchoolModule } from '../../common/school-modules/school-modules';
 import {
   Body,
   Controller,
@@ -28,6 +29,7 @@ import {
 } from './dto/examinations.dto';
 import { ExaminationsService } from './examinations.service';
 
+@SchoolModule('exams')
 @Controller('examinations')
 export class ExaminationsController {
   constructor(private readonly exams: ExaminationsService) {}
@@ -217,6 +219,7 @@ export class ExaminationsController {
   }
 }
 
+@SchoolModule('exams')
 @Controller('marks')
 export class MarksController {
   constructor(private readonly exams: ExaminationsService) {}
@@ -292,6 +295,7 @@ export class MarksController {
   }
 }
 
+@SchoolModule('exams')
 @Controller('students/:studentId/report-cards')
 export class ReportCardsController {
   constructor(private readonly exams: ExaminationsService) {}

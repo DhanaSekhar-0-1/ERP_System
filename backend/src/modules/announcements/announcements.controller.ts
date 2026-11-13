@@ -1,3 +1,4 @@
+import { SchoolModule } from '../../common/school-modules/school-modules';
 import {
   Body,
   Controller,
@@ -16,6 +17,7 @@ import { AnnouncementsService } from './announcements.service';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { UpdateAnnouncementDto } from './dto/update-announcement.dto';
 
+@SchoolModule('announcements')
 @Controller('announcements')
 export class AnnouncementsController {
   constructor(private readonly announcements: AnnouncementsService) {}

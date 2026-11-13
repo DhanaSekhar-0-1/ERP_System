@@ -1,3 +1,4 @@
+import { SchoolModule } from '../../common/school-modules/school-modules';
 import {
   Body,
   Controller,
@@ -22,6 +23,7 @@ import {
 } from './dto/grade-submission.dto';
 import { HomeworkService } from './homework.service';
 
+@SchoolModule('homework')
 @Controller('homework')
 export class HomeworkController {
   constructor(private readonly homework: HomeworkService) {}
@@ -126,6 +128,7 @@ export class HomeworkController {
   }
 }
 
+@SchoolModule('homework')
 @Controller('students')
 export class StudentHomeworkController {
   constructor(private readonly homework: HomeworkService) {}

@@ -473,6 +473,35 @@ async function main() {
   const parentPassword = `Parent#${RUN}`;
   await expect('give guardian a parent login', admin, 'POST', `/guardians/${guardian.id}/account`, { email: parentEmail, password: parentPassword });
   const parent = await login(parentEmail, parentPassword);
+
+  heading('School modules');
+  const modulesBefore = (await expect('read the school module switches', admin, 'GET', '/school-modules')).data;
+  check('module list includes exams and parent login', modulesBefore?.modules?.some((m) => m.key === 'exams') && 'parentLogin' in (modulesBefore?.states ?? {}), modulesBefore?.states);
+  await expect('teacher cannot switch modules', teacher, 'PUT', '/school-modules', { modules: { exams: false } }, 403);
+  try {
+    const off = (await expect('switch exams, notices and parent login off', admin, 'PUT', '/school-modules', {
+      modules: { exams: false, announcements: false, parentLogin: false, nonsense: false },
+      registration: { requireNfcCard: false },
+    })).data;
+    check('saved switches come back', off?.states?.exams === false && off.states.announcements === false && off.states.parentLogin === false && off.registration.requireNfcCard === false, off);
+    check('unknown module keys are ignored', off && !('nonsense' in off.states), off?.states);
+    const teacherContext = (await call(teacher, 'GET', '/auth/context')).data;
+    check('signed-in context carries the switches', teacherContext?.modules?.exams === false && teacherContext.modules.fees !== false, teacherContext?.modules);
+    const examsOff = await call(teacher, 'GET', '/marks/my-assessments');
+    check('a switched-off module refuses requests', examsOff.status === 403 && /switched off/i.test(JSON.stringify(examsOff.error)), examsOff);
+    await expect('notices are refused while switched off', student, 'GET', '/announcements', undefined, 403);
+    await expect('attendance still works with modules off', teacher, 'GET', '/staff-attendance/me/today');
+    const parentRefused = await call(null, 'POST', '/auth/login', { identifier: parentEmail, password: parentPassword });
+    check('parent login is refused when the school has none', parentRefused.status === 401 && /parent logins/i.test(JSON.stringify(parentRefused.error)), parentRefused);
+    await expect('an existing parent session is refused too', parent, 'GET', '/me/children', undefined, 403);
+  } finally {
+    await expect('switch everything back on', admin, 'PUT', '/school-modules', {
+      modules: modulesBefore?.states ?? {},
+      registration: modulesBefore?.registration ?? {},
+    });
+  }
+  await expect('exams work again once switched on', teacher, 'GET', '/marks/my-assessments');
+  await expect('parent session works again once switched on', parent, 'GET', '/me/children');
   const children = (await expect('parent lists own children', parent, 'GET', '/me/children')).data;
   check('parent sees the linked child', children?.length === 1 && children[0].id === studentId, children);
   const parentStudents = (await call(parent, 'GET', '/students')).data;

@@ -1,3 +1,4 @@
+import { SchoolModule } from '../../common/school-modules/school-modules';
 import {
   Body,
   Controller,
@@ -22,6 +23,7 @@ import {
 } from './assets.dto';
 import { AssetsService } from './assets.service';
 
+@SchoolModule('assets')
 @Controller('assets')
 export class AssetsController {
   constructor(private readonly assets: AssetsService) {}

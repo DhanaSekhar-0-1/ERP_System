@@ -30,7 +30,7 @@ Android, but their flows have not been checked by hand on a device, so they are 
 | Role | App | Screens today | Biggest gap |
 |---|---|---|---|
 | Super Admin | Web | Every School Admin page | Full access in the API, but the same missing screens as School Admin, and no organization, user or role screens |
-| School Admin | Web | Overview, Classes & Sections, Teacher Assignments, Exams & Reports, Teachers, Students, Attendance, Approvals, Settings | No screens for student registration, fees, timetables, leave or academic years |
+| School Admin | Web | Overview, Classes & Sections, Teacher Assignments, Exams & Reports, Teachers, Students, Attendance, Approvals, Leave, Settings (default subjects, teacher check-in, modules in use: switch off exams, notices, parent login and other non-MVP1 parts) | No screens for student registration, fees, timetables or academic years |
 | Principal | Web | Same pages, read-only where they cannot change things; releases exam sections | No screens for deciding staff leave or approving discounts |
 | Teacher | Web and mobile | My classes, Attendance (class teacher), Marks entry, Slip tests; mobile Attendance, Subjects, Leave, Notices | No homework screens; phone marks entry untested on a device |
 | Student | Mobile | Attendance, Results, Leave, Notices | No homework, fees or timetable screens |

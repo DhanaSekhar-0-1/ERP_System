@@ -28,6 +28,7 @@ import { ExaminationsModule } from './modules/examinations/examinations.module';
 import { FeesModule } from './modules/fees/fees.module';
 import { LeavesModule } from './modules/leaves/leaves.module';
 import { StaffAttendanceModule } from './modules/staff-attendance/staff-attendance.module';
+import { SchoolModulesModule } from './modules/school-modules/school-modules.module';
 import { TimetablesModule } from './modules/timetables/timetables.module';
 import { ComplaintsModule } from './modules/complaints/complaints.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -72,6 +73,7 @@ import { SyncModule } from './modules/sync/sync.module';
     FeesModule,
     LeavesModule,
     StaffAttendanceModule,
+    SchoolModulesModule,
     TimetablesModule,
     ComplaintsModule,
     NotificationsModule,

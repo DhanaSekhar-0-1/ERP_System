@@ -1,3 +1,5 @@
+import { ROLE } from '../access/roles';
+import { moduleStates } from '../school-modules/school-modules';
 import {
   BadRequestException,
   HttpException,
@@ -141,6 +143,7 @@ export class SupabaseAuthService implements OnModuleInit {
       await this.recordAttempt(identifier, false);
       throw error;
     }
+    await this.assertParentLoginAllowed(email);
     const client = this.createAnonClient();
     const { data, error } = await client.auth.signInWithPassword({
       email,
@@ -483,6 +486,26 @@ export class SupabaseAuthService implements OnModuleInit {
       throw new UnauthorizedException('Invalid student ID or password');
     }
     return staff.user.email;
+  }
+
+  /**
+   * When the school has switched off parent logins (docs/mvp-plan.md, "Pilot setup"), an account
+   * that is only a Parent cannot sign in; the family uses the student's login instead.
+   */
+  private async assertParentLoginAllowed(email: string): Promise<void> {
+    const user = await this.database.user.findUnique({
+      where: { email },
+      select: {
+        roles: { select: { role: { select: { name: true } } } },
+        school: { select: { settings: { select: { metadata: true } } } },
+      },
+    });
+    if (!user || !user.roles.length || !user.roles.every(({ role }) => role.name === ROLE.PARENT)) return;
+    if (!moduleStates(user.school?.settings?.metadata ?? null).parentLogin) {
+      throw new UnauthorizedException(
+        "This school does not use parent logins. Sign in with the student's admission number.",
+      );
+    }
   }
 
   /**

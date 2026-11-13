@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { FormError } from '../components/Dialog';
+import { SchoolModuleSettings } from '../components/SchoolModuleSettings';
 import { TeacherCheckInSettings } from '../components/TeacherCheckInSettings';
 import { buttonClass, Card, errorText, ghostButtonClass, inputClass, Message, PageHeader } from '../components/ui';
 
@@ -79,6 +80,9 @@ export function SettingsPage() {
       </Card>
       <div className="mt-6">
         <TeacherCheckInSettings />
+      </div>
+      <div className="mt-6">
+        <SchoolModuleSettings />
       </div>
     </>
   );

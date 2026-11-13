@@ -180,6 +180,14 @@ Any step can send it back with a reason; the family can cancel while it is pendi
   library, assets, complaints, certificates, and the **parent login**. A "Use the MVP1 set"
   button applies this. Schools that never set switches keep everything on, so nothing
   changes for existing schools or the test suite. Turning on exams for MVP2 is a setting.
+- **How the switches work (built in 8a):** saved in school settings metadata (`modules`,
+  `registration`); `GET/PUT /school-modules` (PUT: School Admin or Super Admin, audited);
+  controllers are tagged `@SchoolModule('exams')` and the authorization guard refuses them with
+  403 "... is switched off for this school". `/auth/context` returns `modules`, so the web hides
+  Exams & Reports, Marks entry and Slip tests, and the phone hides the Subjects/marks, Results and
+  Notices tabs. With the parent login off, a Parent-only account cannot sign in (401) and an
+  open parent session is refused (403). The Settings page has a "Modules in use" card with the
+  "Use the MVP1 set" button and the Aadhaar/NFC registration switches.
 - **NFC card optional** for the demo and pilot (the registration switch `requireNfcCard` off);
   NFC is tested later by the developer with an NFC reader on the phone's USB (OTG) port. Such
   readers usually type the card number like a keyboard, so the phone screen must accept a typed
@@ -323,8 +331,8 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 6a | Teacher check-in and check-out (location, late time, Admin corrections, settings) | Done 2026-11-10 |
 | 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | Done 2026-11-10 |
 | 7 | Leave (decided 2026-11-12, see "Leave" in section 3): teacher request on phone and web with half days; Principal decides teacher leave on the web; class teacher decides student leave on the web too; Admin sees approved leave; no leave limits in MVP1 | Done 2026-11-13 |
-| 8a | Module switches per school (parent login and non-MVP1 modules off; NFC optional) | Next |
-| 8b | Hosting files and guide: Render (backend), Vercel (web), new Supabase project | |
+| 8a | Module switches per school (parent login and non-MVP1 modules off; NFC optional) | Done 2026-11-13 |
+| 8b | Hosting files and guide: Render (backend), Vercel (web), new Supabase project | Next |
 | 8c | Android APK (Expo EAS) and the device-test checklist | |
 
 Admin and Super Admin work on the **web**; the phone app is for teachers and students.

@@ -28,17 +28,20 @@ steps 1–7 are done; **step 8 is next**.
 | 4+ | Excel import script `npm run import:students` | `32b2627` |
 | 5, 5a | Teacher registration (Teacher ID T26A05); choose-your-own-password screen (web + phone) | `62d4214`, `d7146aa` |
 | 6a, 6b | Teacher check-in/out at school; Admin attendance dashboard and student details page | `8ba0b80`, `9174298` |
-| 7 | Leave: teacher requests on phone and web with half days, Principal decides on the web, class teachers decide student leave on the web too, Admin sees who is away; no leave limits in MVP1 | this step's commit |
+| 7 | Leave: teacher requests on phone and web with half days, Principal decides on the web, class teachers decide student leave on the web too, Admin sees who is away; no leave limits in MVP1 | `1be2665` |
+| 8a | Module switches per school in web Settings (server-enforced; "Use the MVP1 set"; parent login off; Aadhaar/NFC registration switches) | this step's commit |
 
 **Test data (decided 2026-11-13):** the development database is **not** cleaned; nothing is
 deleted. Teacher "ravikatari" (42124) is the user's own and must be kept. Agreed for later: make
 the e2e suite reuse one test parent and deactivate/archive what each run creates.
 
-**Step 8 — start here** (decisions in docs/mvp-plan.md, "Pilot setup"; split into 8a module
-switches, 8b hosting files and guide, 8c APK and device checklist): hide the parent login and every module not in MVP1 (web and phone);
-host the backend, web and a separate client database for the pilot; Android build; test on a
-real phone (screens, a real check-in at school, NFC cards, leave). Hosting needs decisions from
-the user (provider, domain, who pays); ask before choosing.
+**Step 8b — start here** (decisions in docs/mvp-plan.md, "Pilot setup"). 8a is done: the
+module switches are on the web Settings page ("Modules in use"); the development school still
+has every module on. Next: 8b hosting files and a step-by-step guide (Render backend, Vercel web,
+new Supabase project; the accounts and payment are the user's), then 8c the Android APK (Expo
+EAS) and the device-test checklist (first password, check-in at school, leave, attendance; NFC
+via the OTG reader, so check the phone scan screen accepts a typed card ID). Before the pilot:
+update the packages `npm audit` flags.
 
 **How to run and test** (details in [CMD.md](./CMD.md) and `.claude/launch.json`):
 
@@ -47,7 +50,7 @@ the user (provider, domain, who pays); ask before choosing.
 - `backend/.env` must have `PII_ENCRYPTION_KEY` (Aadhaar encryption; local only, keep a backup).
 - Test accounts are in `test-org-school.txt` (repository root). After pulling, run
   `npm run prisma:migrate:deploy` and `npm run prisma:seed` in `backend`.
-- e2e: `npm run test:e2e` in `backend` against a running server (613 checks, about 3–10 minutes).
+- e2e: `npm run test:e2e` in `backend` against a running server (628 checks, about 3–10 minutes).
   The suite is one long scenario and cannot run a single section yet.
 
 **Working agreements with the user:**
@@ -106,7 +109,7 @@ Shared services in `src/common`:
 |---|---|
 | Prisma schema and migrations | Current (16 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 613/613 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 628/628 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |

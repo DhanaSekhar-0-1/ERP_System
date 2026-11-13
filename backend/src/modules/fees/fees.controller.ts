@@ -1,3 +1,4 @@
+import { SchoolModule } from '../../common/school-modules/school-modules';
 import {
   Body,
   Controller,
@@ -28,6 +29,7 @@ import {
 } from './dto/fees.dto';
 import { FeesService } from './fees.service';
 
+@SchoolModule('fees')
 @Controller('fee-structures')
 export class FeeStructuresController {
   constructor(private readonly fees: FeesService) {}
@@ -97,6 +99,7 @@ export class FeeStructuresController {
   }
 }
 
+@SchoolModule('fees')
 @Controller('student-fees')
 export class StudentFeesController {
   constructor(private readonly fees: FeesService) {}
@@ -143,6 +146,7 @@ export class StudentFeesController {
   }
 }
 
+@SchoolModule('fees')
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly fees: FeesService) {}
@@ -213,6 +217,7 @@ export class PaymentsController {
   }
 }
 
+@SchoolModule('fees')
 @Controller()
 export class FeeViewsController {
   constructor(private readonly fees: FeesService) {}

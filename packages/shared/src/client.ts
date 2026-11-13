@@ -44,6 +44,8 @@ import type {
   StaffAttendanceDay,
   StaffAttendanceRecord,
   StaffAttendanceSettings,
+  SchoolModuleKey,
+  SchoolModulesView,
   StaffAttendanceStatus,
   StaffAttendanceToday,
   Staff,
@@ -326,6 +328,11 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
       call<StudentAttendanceProfile>('GET', `/attendance-dashboard/students/${studentId}`),
     saveStaffAttendanceSettings: (input: Partial<Pick<StaffAttendanceSettings, 'latitude' | 'longitude' | 'radiusMeters' | 'lateAfter'>>) =>
       call<StaffAttendanceSettings>('PUT', '/staff-attendance/settings', input),
+    schoolModules: () => call<SchoolModulesView>('GET', '/school-modules'),
+    saveSchoolModules: (input: {
+      modules?: Partial<Record<SchoolModuleKey, boolean>>;
+      registration?: Partial<SchoolModulesView['registration']>;
+    }) => call<SchoolModulesView>('PUT', '/school-modules', input),
     staffAssignments: (academicYearId: string) =>
       call<StaffAssignment[]>('GET', `/staff-assignments${query({ academicYearId })}`),
     assignTeacher: (

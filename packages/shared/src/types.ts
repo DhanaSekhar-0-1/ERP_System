@@ -20,6 +20,33 @@ export interface UserContext {
   guardianId: string | null;
   /** Still on a generated first password: the apps show only the choose-a-new-password screen. */
   mustChangePassword: boolean;
+  /** The school's module switches; a module missing here is on. */
+  modules?: Partial<Record<SchoolModuleKey, boolean>>;
+}
+
+export type SchoolModuleKey =
+  | 'exams'
+  | 'announcements'
+  | 'homework'
+  | 'fees'
+  | 'timetable'
+  | 'transport'
+  | 'library'
+  | 'assets'
+  | 'complaints'
+  | 'certificates'
+  | 'parentLogin';
+
+/** True unless the user's school has switched this module off. */
+export function moduleOn(user: Pick<UserContext, 'modules'> | null | undefined, key: SchoolModuleKey): boolean {
+  return user?.modules?.[key] !== false;
+}
+
+/** GET/PUT /school-modules: which parts of the app the school uses, and the registration switches. */
+export interface SchoolModulesView {
+  states: Record<SchoolModuleKey, boolean>;
+  modules: { key: SchoolModuleKey; label: string; description: string; enabled: boolean; inMvp1: boolean }[];
+  registration: { requireAadhaar: boolean; requireNfcCard: boolean };
 }
 
 export interface StudentName {
