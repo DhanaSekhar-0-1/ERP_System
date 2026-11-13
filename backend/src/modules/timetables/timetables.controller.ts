@@ -1,3 +1,4 @@
+import { SchoolModule } from '../../common/school-modules/school-modules';
 import {
   Body,
   Controller,
@@ -24,6 +25,7 @@ import {
 } from './dto/timetables.dto';
 import { TimetablesService } from './timetables.service';
 
+@SchoolModule('timetable')
 @Controller('timetables')
 export class TimetablesController {
   constructor(private readonly timetables: TimetablesService) {}
@@ -81,6 +83,7 @@ export class TimetablesController {
   }
 }
 
+@SchoolModule('timetable')
 @Controller('timetable-slots')
 export class TimetableSlotsController {
   constructor(private readonly timetables: TimetablesService) {}
@@ -114,6 +117,7 @@ export class TimetableSlotsController {
   }
 }
 
+@SchoolModule('timetable')
 @Controller()
 export class TimetableViewsController {
   constructor(private readonly timetables: TimetablesService) {}
@@ -131,6 +135,7 @@ export class TimetableViewsController {
   }
 }
 
+@SchoolModule('timetable')
 @Controller('substitute-requests')
 export class SubstitutesController {
   constructor(private readonly timetables: TimetablesService) {}

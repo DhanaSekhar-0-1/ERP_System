@@ -31,8 +31,23 @@ import type {
   SchoolClass,
   Section,
   SectionSubject,
+  AttendanceDashboardDay,
+  DashboardSectionStudents,
+  DeviceLocation,
+  LeaveQuery,
+  LeaveSession,
+  StaffLeave,
+  StaffLeaveType,
+  StudentAttendanceProfile,
   Gender,
   RegisteredTeacher,
+  StaffAttendanceDay,
+  StaffAttendanceRecord,
+  StaffAttendanceSettings,
+  SchoolModuleKey,
+  SchoolModulesView,
+  StaffAttendanceStatus,
+  StaffAttendanceToday,
   Staff,
   StaffAssignment,
   SectionStudent,
@@ -206,8 +221,22 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
       call<StudentLeave[]>('GET', `/student-leaves${query({ status })}`),
     requestLeave: (input: { studentId: string; fromDate: string; toDate: string; reason: string }) =>
       call<StudentLeave>('POST', '/student-leaves', input),
-    decideLeave: (leaveId: string, decision: 'approve' | 'reject') =>
-      call<StudentLeave>('POST', `/student-leaves/${leaveId}/${decision}`, {}),
+    decideLeave: (leaveId: string, decision: 'approve' | 'reject', note?: string) =>
+      call<StudentLeave>('POST', `/student-leaves/${leaveId}/${decision}`, note ? { note } : {}),
+    studentLeaveList: (filters: LeaveQuery = {}) =>
+      call<StudentLeave[]>('GET', `/student-leaves${query({ ...filters })}`),
+
+    staffLeaves: (filters: LeaveQuery = {}) => call<StaffLeave[]>('GET', `/staff-leaves${query({ ...filters })}`),
+    requestStaffLeave: (input: {
+      leaveType: StaffLeaveType;
+      fromDate: string;
+      toDate: string;
+      session?: LeaveSession;
+      reason: string;
+    }) => call<StaffLeave>('POST', '/staff-leaves', input),
+    decideStaffLeave: (leaveId: string, decision: 'approve' | 'reject', note?: string) =>
+      call<StaffLeave>('POST', `/staff-leaves/${leaveId}/${decision}`, note ? { note } : {}),
+    cancelStaffLeave: (leaveId: string) => call<StaffLeave>('POST', `/staff-leaves/${leaveId}/cancel`),
 
     approvals: () => list<ApprovalRequest>(`/approval-requests${query({ status: 'PENDING' })}`),
     decideApproval: (requestId: string, decision: 'approve' | 'reject') =>
@@ -282,6 +311,28 @@ export function createApi({ baseUrl, store, onSignedOut }: ApiOptions) {
       nfcId?: string;
     }) => call<RegisteredTeacher>('POST', '/staff', input),
     teachingSubjects: () => call<string[]>('GET', '/staff/teaching-subjects'),
+
+    myAttendanceToday: () => call<StaffAttendanceToday>('GET', '/staff-attendance/me/today'),
+    checkIn: (location: DeviceLocation) => call<StaffAttendanceRecord>('POST', '/staff-attendance/check-in', location),
+    checkOut: (location: DeviceLocation) => call<StaffAttendanceRecord>('POST', '/staff-attendance/check-out', location),
+    staffAttendanceDay: (date?: string) => call<StaffAttendanceDay>('GET', `/staff-attendance${query({ date })}`),
+    correctStaffAttendance: (
+      staffId: string,
+      input: { date: string; status: StaffAttendanceStatus; checkInTime?: string; checkOutTime?: string; reason: string },
+    ) => call<StaffAttendanceRecord>('PUT', `/staff-attendance/${staffId}`, input),
+    staffAttendanceSettings: () => call<StaffAttendanceSettings>('GET', '/staff-attendance/settings'),
+    attendanceDashboard: (date?: string) => call<AttendanceDashboardDay>('GET', `/attendance-dashboard${query({ date })}`),
+    attendanceDashboardSection: (sectionId: string, date?: string) =>
+      call<DashboardSectionStudents>('GET', `/attendance-dashboard/sections/${sectionId}${query({ date })}`),
+    studentAttendanceProfile: (studentId: string) =>
+      call<StudentAttendanceProfile>('GET', `/attendance-dashboard/students/${studentId}`),
+    saveStaffAttendanceSettings: (input: Partial<Pick<StaffAttendanceSettings, 'latitude' | 'longitude' | 'radiusMeters' | 'lateAfter'>>) =>
+      call<StaffAttendanceSettings>('PUT', '/staff-attendance/settings', input),
+    schoolModules: () => call<SchoolModulesView>('GET', '/school-modules'),
+    saveSchoolModules: (input: {
+      modules?: Partial<Record<SchoolModuleKey, boolean>>;
+      registration?: Partial<SchoolModulesView['registration']>;
+    }) => call<SchoolModulesView>('PUT', '/school-modules', input),
     staffAssignments: (academicYearId: string) =>
       call<StaffAssignment[]>('GET', `/staff-assignments${query({ academicYearId })}`),
     assignTeacher: (

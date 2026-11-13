@@ -1,3 +1,4 @@
+import { SchoolModule } from '../../common/school-modules/school-modules';
 import {
   Body,
   Controller,
@@ -20,6 +21,7 @@ import {
 } from './dto/certificates.dto';
 import { CertificatesService } from './certificates.service';
 
+@SchoolModule('certificates')
 @Controller('certificates')
 export class CertificatesController {
   constructor(private readonly certificates: CertificatesService) {}

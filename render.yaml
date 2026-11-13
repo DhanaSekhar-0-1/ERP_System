@@ -1,0 +1,40 @@
+# Render Blueprint for the backend API (docs/hosting-guide.md, step 5).
+# Secrets marked `sync: false` are typed into the Render dashboard once and never stored here.
+services:
+  - type: web
+    name: school-erp-api
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: backend
+    # Free plan has no pre-deploy step, so migrations and the role list run during the build.
+    # Both are safe to repeat: applied migrations are skipped and the seed only upserts roles.
+    buildCommand: npm ci --include=dev && npx prisma generate && npx prisma migrate deploy && npm run db:check-rls && npm run prisma:seed && npm run build
+    startCommand: node dist/main.js
+    healthCheckPath: /api/v1/health
+    autoDeploy: false
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: API_PREFIX
+        value: api/v1
+      - key: NOTIFICATION_WORKER_ENABLED
+        value: "true"
+      - key: NOTIFICATION_WORKER_INTERVAL_MS
+        value: "5000"
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: PII_ENCRYPTION_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

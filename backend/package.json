@@ -21,7 +21,8 @@
     "prisma:seed-demo": "ts-node scripts/seed-demo-school.ts",
     "db:check-rls": "ts-node scripts/check-rls.ts",
     "test:e2e": "node test/e2e/erp-flow.e2e.mjs",
-    "import:students": "ts-node scripts/import-students.ts"
+    "import:students": "ts-node scripts/import-students.ts",
+    "pilot:setup": "ts-node scripts/setup-pilot-school.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

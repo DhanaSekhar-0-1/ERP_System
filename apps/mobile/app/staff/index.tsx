@@ -1,11 +1,12 @@
 import { colors, isoDate, MySection } from '@erp/shared';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../../src/api';
 import { useAuth } from '../../src/auth';
 import { Button, Card, Empty, errorText, HeroHeader } from '../../src/ui';
+import { MyDayCard } from '../../src/MyDayCard';
 
 function SectionCard({ section }: { section: MySection }) {
   const router = useRouter();
@@ -52,13 +53,15 @@ function SectionCard({ section }: { section: MySection }) {
 
 export default function StaffHome() {
   const { user } = useAuth();
+  const client = useQueryClient();
   const date = isoDate();
   const sections = useQuery({ queryKey: ['sections', date], queryFn: () => api.mySections(date) });
   const refetch = sections.refetch;
   useFocusEffect(
     useCallback(() => {
       void refetch();
-    }, [refetch]),
+      void client.invalidateQueries({ queryKey: ['my-attendance'] });
+    }, [refetch, client]),
   );
   const remaining = sections.data?.reduce((sum, section) => sum + section.students - section.marked, 0) ?? 0;
 
@@ -72,6 +75,7 @@ export default function StaffHome() {
         subtitle={remaining ? `${remaining} students still to mark today` : 'Attendance is complete for today'}
       />
       <View style={styles.list}>
+        <MyDayCard />
         {sections.isError && <Empty tone="error" text={errorText(sections.error)} />}
         {sections.data?.length === 0 && <Empty text="You are not class teacher of any section, so there is no attendance to mark. Your subjects are in the Subjects tab." />}
         {sections.data?.map((section) => <SectionCard key={section.id} section={section} />)}

@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../database/database.service';
 import { SupabaseUser } from '../auth/supabase-user.interface';
 import { ROLE } from './roles';
+import { moduleStates, SchoolModuleKey } from '../school-modules/school-modules';
 
 export interface AccessContext {
   userId: string;
@@ -31,6 +32,8 @@ export interface AccessContext {
   isLeader: boolean;
   /** Still on a generated first password; only a few routes are allowed until it changes. */
   mustChangePassword: boolean;
+  /** The school's module switches (docs/mvp-plan.md, "Pilot setup"); unset modules are on. */
+  modules: Record<SchoolModuleKey, boolean>;
 }
 
 export type SchoolContext = AccessContext & { schoolId: string };
@@ -255,7 +258,7 @@ export class AccessService {
         mustChangePassword: true,
         organizationId: true,
         schoolId: true,
-        school: { select: { isArchived: true } },
+        school: { select: { isArchived: true, settings: { select: { metadata: true } } } },
         staffProfile: { select: { id: true } },
         studentProfile: { select: { id: true, isArchived: true } },
         guardian: { select: { id: true } },
@@ -323,6 +326,7 @@ export class AccessService {
       isStudent: roles.includes(ROLE.STUDENT),
       isLeader: isSuperAdmin || isSchoolAdmin || isPrincipal,
       mustChangePassword: user.mustChangePassword,
+      modules: moduleStates(user.school?.settings?.metadata ?? null),
     };
   }
 }

@@ -132,6 +132,8 @@ export class AuthController {
       studentId: context.studentId,
       guardianId: context.guardianId,
       mustChangePassword: context.mustChangePassword,
+      /** Which modules the school uses, so apps hide the rest. */
+      modules: context.modules,
     };
   }
 

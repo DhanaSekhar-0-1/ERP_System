@@ -24,6 +24,8 @@ import {
 } from './dto/create-attendance.dto';
 import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 import { AttendanceService } from './attendance.service';
+import { AttendanceDashboardService } from './attendance-dashboard.service';
+import { IsDateString, IsOptional } from 'class-validator';
 
 @Controller('attendance')
 export class AttendanceController {
@@ -128,3 +130,44 @@ export class AttendanceViewsController {
     return this.attendance.forSection(user, sectionId, query);
   }
 }
+
+class DashboardQueryDto {
+  /** YYYY-MM-DD; defaults to today. */
+  @IsOptional()
+  @IsDateString()
+  date?: string;
+}
+
+/** The Admin attendance dashboard: the day, one section, one student. */
+@Controller('attendance-dashboard')
+export class AttendanceDashboardController {
+  constructor(private readonly dashboard: AttendanceDashboardService) {}
+
+  @Get()
+  @RequirePermissions('attendance:read')
+  day(@CurrentUser() user: SupabaseUser, @Query() query: DashboardQueryDto) {
+    return this.dashboard.day(user, query.date?.slice(0, 10) ?? isoToday());
+  }
+
+  @Get('sections/:sectionId')
+  @RequirePermissions('attendance:read')
+  section(
+    @CurrentUser() user: SupabaseUser,
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+    @Query() query: DashboardQueryDto,
+  ) {
+    return this.dashboard.section(user, sectionId, query.date?.slice(0, 10) ?? isoToday());
+  }
+
+  @Get('students/:studentId')
+  @RequirePermissions('attendance:read')
+  student(@CurrentUser() user: SupabaseUser, @Param('studentId', ParseUUIDPipe) studentId: string) {
+    return this.dashboard.student(user, studentId);
+  }
+}
+
+/** Today in India, where the schools are; attendance dates are school-local. */
+function isoToday(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+}
+

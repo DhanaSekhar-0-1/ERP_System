@@ -1,4 +1,4 @@
-import { LeaveStatus, StaffLeaveType } from '@prisma/client';
+import { LeaveSession, LeaveStatus, StaffLeaveType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -54,6 +54,11 @@ export class CreateStaffLeaveDto {
   @IsDateString()
   toDate!: string;
 
+  /** Full day (default), or the morning or afternoon half of a single day. */
+  @IsOptional()
+  @IsEnum(LeaveSession)
+  session?: LeaveSession;
+
   @IsString()
   @MinLength(3)
   reason!: string;
@@ -77,6 +82,16 @@ export class LeaveQueryDto {
   @IsOptional()
   @IsUUID()
   staffId?: string;
+
+  /** Only leave that ends on or after this date (YYYY-MM-DD), e.g. today for current and upcoming. */
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  /** Only leave that starts on or before this date (YYYY-MM-DD). */
+  @IsOptional()
+  @IsDateString()
+  to?: string;
 }
 
 export class EntitlementDto {

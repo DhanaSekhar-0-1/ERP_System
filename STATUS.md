@@ -12,13 +12,87 @@ Related documents:
 - [backend/README.md](./backend/README.md) - setup, conventions, and module reference
 - [CMD.md](./CMD.md) - local run and test commands
 
+## 0. Resume here (updated 2026-11-13)
+
+**Branch:** `feature/mvp1` (pushed; see `git log` for the last commit). `main` is at `7d83a52` and has none
+of the MVP1 work yet. Never push MVP1 work to `main` directly.
+
+**MVP1 progress** (full table in [docs/mvp-plan.md](./docs/mvp-plan.md#5-mvp1-build-order)):
+steps 1–7 are done; **step 8 is next**.
+
+| Step | What | Commit |
+|---|---|---|
+| 2, 2a | Account rules (Super Admin-only senior accounts), Principal-only staff leave and discounts, approval loophole closed | `c66f3c0`, `ccd1465` |
+| 3 | MVP1 database fields | `952f8ca` |
+| 4 | Student registration, admission-number login, Excel import endpoint; hardening | `0f03b80`, `81da79b` |
+| 4+ | Excel import script `npm run import:students` | `32b2627` |
+| 5, 5a | Teacher registration (Teacher ID T26A05); choose-your-own-password screen (web + phone) | `62d4214`, `d7146aa` |
+| 6a, 6b | Teacher check-in/out at school; Admin attendance dashboard and student details page | `8ba0b80`, `9174298` |
+| 7 | Leave: teacher requests on phone and web with half days, Principal decides on the web, class teachers decide student leave on the web too, Admin sees who is away; no leave limits in MVP1 | `1be2665` |
+| 8a | Module switches per school in web Settings (server-enforced; "Use the MVP1 set"; parent login off; Aadhaar/NFC registration switches) | `aa6b221` |
+| 8b | Hosting: `render.yaml` (Render Free, Singapore; migrations, RLS check and role seed run in the build), `apps/web/vercel.json`, `npm run pilot:setup` (school, year, MVP1 switches, first logins) and [docs/hosting-guide.md](./docs/hosting-guide.md) | `17e9ea9` |
+| 8c | Android APK: `apps/mobile/eas.json` (`pilot` profile, APK, Render API address), [docs/android-apk-guide.md](./docs/android-apk-guide.md), [docs/device-test-checklist.md](./docs/device-test-checklist.md); the phone scan screen always shows a focused Card ID box that submits on Enter (USB/OTG readers) | this step's commit |
+
+**Test data (decided 2026-11-13):** the development database is **not** cleaned; nothing is
+deleted. Teacher "ravikatari" (42124) is the user's own and must be kept. A trial school "Pilot Trial School" (PILOT-TEST, logins `pilot.*@erp.local`) was made on 2026-11-13 to test `pilot:setup`; it is kept like the rest. Agreed for later: make
+the e2e suite reuse one test parent and deactivate/archive what each run creates.
+
+**MVP1 is built — start here.** Steps 1–8c are done. What remains is the user's own setup and
+testing, in this order: (1) follow [docs/hosting-guide.md](./docs/hosting-guide.md) (Supabase,
+Render, Vercel, `npm run pilot:setup`); (2) build the APK with
+[docs/android-apk-guide.md](./docs/android-apk-guide.md) (`eas init` adds a `projectId` to
+`apps/mobile/app.json`; commit it); (3) run [docs/device-test-checklist.md](./docs/device-test-checklist.md)
+on a real phone, including NFC with the OTG reader (card numbers must match the reader used at
+registration). Developer tasks before the pilot: fix
+anything the device test finds, and the agreed e2e tidy-up (reuse one test parent).
+
+**How to run and test** (details in [CMD.md](./CMD.md) and `.claude/launch.json`):
+
+- Backend `npm run build` then start (`backend` launch config sets `RAZORPAY_WEBHOOK_SECRET`);
+  web on port 3001 (`web`); phone app web preview on 8081 (`mobile-web-preview`).
+- `backend/.env` must have `PII_ENCRYPTION_KEY` (Aadhaar encryption; local only, keep a backup).
+- Test accounts are in `test-org-school.txt` (repository root). After pulling, run
+  `npm run prisma:migrate:deploy` and `npm run prisma:seed` in `backend`.
+- e2e: `npm run test:e2e` in `backend` against a running server (628 checks, about 3–10 minutes).
+  The suite is one long scenario and cannot run a single section yet.
+
+**Working agreements with the user:**
+
+- Write decisions into the docs (mainly `docs/mvp-plan.md`) before building a step; ask the user
+  when the plan does not settle something, with a recommended option.
+- While building, test only the related APIs and screens (plus type-check and a browser
+  check); run the full e2e suite once before each commit.
+- One commit per step on `feature/mvp1`, pushed to that branch; update STATUS and the role docs
+  in the same commit.
+
+**Open items to remember:**
+
+- Packages updated 2026-11-13 (`npm audit fix`, no breaking changes): the critical
+  `proxy-addr` and the high `multer`/`@nestjs/platform-express` issues are fixed. Left on purpose:
+  `deepmerge-ts` (high) inside the Prisma 6 CLI config loader, fixed only in Prisma 7, a major
+  upgrade; it runs at build/migrate time, not while the API serves requests. Dev-only build tools
+  (moderate/low) and Expo's build-time `minimatch` (its fix would downgrade Expo to 52) also stay.
+  Revisit with the Prisma 7 upgrade after the pilot.
+- The development database holds many test records from e2e runs (teachers, `QA-…` and
+  `SCR-…` students). The test student now has 41 parent links, so every results notification
+  goes to ~40 parents; the queue of deliveries can then delay the e2e notification checks
+  (seen 2026-11-13: they failed until the queue drained, then 613/613 passed) and makes the
+  suite slower. Cleaning the old test parents, or making the suite reuse one, would fix it.
+- A run that crosses midnight once made the late check-in test fail; the test now works out
+  the expected status from the actual check-in time.
+- A fake-location app can cheat teacher check-in; the dashboard and corrections are the check.
+- Schools must have their time zone set (Asia/Kolkata is used when it is not).
+- Not tested on a real phone yet: phone screens, check-in at school, NFC cards.
+- Teacher leave has no limits in MVP1 (user's choice); allowances can be switched on later with
+  `leave.enforceBalance` in school settings.
+
 ## 1. Architecture
 
 ```text
 Web (apps/web, React + Vite) and Mobile (apps/mobile, React Native + Expo)
   -> NestJS 11 REST API (backend/src, prefix /api/v1, ~350 routes)
   -> Prisma 6 (DatabaseService extends PrismaClient)
-  -> Supabase PostgreSQL (14 migrations, 71 tables)
+  -> Supabase PostgreSQL (16 migrations, 72 tables)
   -> Supabase Auth (identity) + Supabase Storage (private files, bucket erp-files)
 ```
 
@@ -40,9 +114,9 @@ Shared services in `src/common`:
 
 | Area | Status |
 |---|---|
-| Prisma schema and migrations | Current (14 migrations) |
+| Prisma schema and migrations | Current (16 migrations) |
 | Build / type-check / lint | Passing (`npm run build`, `npm run lint`) |
-| End-to-end suite | 555/555 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
+| End-to-end suite | 628/628 checks passing (`npm run test:e2e`; start the server with `RAZORPAY_WEBHOOK_SECRET=dev_webhook_secret`) |
 | Record-level access control | Implemented for all modules |
 | Row-Level Security | Enabled on all public tables with no policies; `anon`/`authenticated` have no privileges, so the Supabase Data API is closed. Check with `npm run db:check-rls` |
 | Audit logging | Written for every sensitive mutation |
@@ -71,7 +145,7 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 | Announcements | Done | Audience targeting applied on read; publish notifies the audience |
 | Examinations and marks | Done | Exam types FA1-FA4 (minor), Q1 Quarterly, Q2 Half-yearly, Q3 Annual (major), Pre-public (Class 10 only), slip tests, and Other. Teachers submit marks; each section is approved by the School Admin once its marks are complete and released by the Principal, independently of other sections (bulk approve-ready and release-approved too). Released marks and report cards show to that section's students, parents and teachers at once; the exam is marked released when every section is. Teachers create slip tests for their own sections, and the School Admin's approval releases them. Tier 3/4 corrections, report cards |
 | Fees and payments | Done | Structure approval, refunds (Tier 3), discounts (always a request; only the Principal approves, never their own), receipts, gateway orders, signed idempotent webhooks |
-| Leave | Done | Student leave marks ON_LEAVE; staff leave checks balance, is decided only by the Principal (reason needed to reject), and opens substitute requests |
+| Leave | Done | Student leave marks ON_LEAVE and is decided by the class teacher (phone and web); teacher leave can be a morning or afternoon half day, is decided only by the Principal (reason needed to reject), and opens substitute requests; no leave limits unless `leave.enforceBalance` is set. Web Leave pages for leaders and teachers; phone Leave tab for teachers |
 | Timetable and substitutes | Done | Rule-based conflict engine, draft generator, available-teacher ranking |
 | Feedback and complaints | Done | Leader-only routing, anonymity, SLA auto-escalation, repeated-complaint alert |
 | Notifications | Done | Inbox, preferences, devices, templates, delivery log; delivery worker with FCM/Twilio/Resend senders, retries with backoff, retry/process admin routes. FCM (push), Twilio (SMS) and Resend (email) are **not verified** against the real services |
@@ -92,15 +166,39 @@ All modules from `API's_modules.md` have APIs. Status reflects end-to-end test c
 ## 5. Next steps
 
 MVP1 is being built on branch `feature/mvp1`, in the order set in
-[docs/mvp-plan.md](./docs/mvp-plan.md#5-mvp1-build-order): database changes for the new teacher
-and student fields, student creation with admission-number login and Excel import, teacher
-registration with app-made IDs, teacher check-in and the attendance dashboard, leave screens,
-then hiding the parent login and unused modules, hosting, and a device test. Alongside it:
+[docs/mvp-plan.md](./docs/mvp-plan.md#5-mvp1-build-order). Steps 1–6b are done; next are the
+leave screens (step 7), then hiding the parent login and unused modules, hosting, and a device
+test (step 8). See section 0 above for where to resume. Alongside it:
 
-1. Change the test passwords that are readable in the repository history.
-2. A separate client database and hosting for the one-month pilot.
-3. Try real cards on an NFC phone.
-4. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+1. ~~Update the server packages flagged by `npm audit`~~ Done 2026-11-13 (see open items).
+2. Change the test passwords that are readable in the repository history.
+3. A separate client database and hosting for the one-month pilot.
+4. Try real cards on an NFC phone, and a real check-in at school.
+5. Split the e2e suite so one area can run on its own (offered to the user, not started).
+6. CI pipeline running build, lint, `db:check-rls`, and the e2e suite against a staging project.
+
+Done 2026-11-13: leave (step 7). Teachers ask for leave on the phone and the web, with a
+morning or afternoon half day for one date (0.5 days); no leave limits in MVP1; the Principal
+approves or rejects on the web (reason required); class teachers decide student leave on the
+web too; the Admin sees who is away today and in the coming days. A morning half day is not
+marked late at check-in, and the dashboard shows the half. Checked: the API rules, the teacher
+and Principal web pages (request, reject with reason), and the phone Leave tab (history with
+the Principal's reason).
+
+Done 2026-11-10: Admin attendance dashboard (step 6b). The web Attendance page now shows the
+day across the school (summary tiles), Teachers today with corrections, every section of the
+active year (present, absent, on leave, not marked, %), a section's students with today's
+status and year-to-date %, and links to a new student details page with monthly attendance per
+year. Checked in the browser: a correction (Divya Rao, Present 08:50, reason shown), Class 8-A
+students (66.7% shown in red), and a student's details page.
+
+Done 2026-11-10: teacher check-in and check-out (step 6a). Teachers check in and out on the
+phone only within the school's radius (default 200 m; readings rougher than 150 m refused),
+Late after the school's set time, once a day each, never on approved leave. School Admin or
+Super Admin corrects a day with a reason; the day's list shows Present, Late, On leave, Absent
+or Not checked in with a summary. Settings card on the web Settings page. Checked in the
+browser: settings saved and read back; phone card before and after check-in (Late, In at 21:22,
+Check out); a refused location shows a clear message.
 
 Done 2026-11-10: "Choose your own password" screen in the web and phone apps (step 5a). After a
 sign-in with a first password the app shows only this screen until the password is changed,

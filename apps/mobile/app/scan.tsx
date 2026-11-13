@@ -113,8 +113,14 @@ export default function ScanScreen() {
       : state === 'disabled'
         ? 'NFC is turned off. Enable it in your phone settings.'
         : state === 'unsupported'
-          ? 'NFC is not available here. Type the card ID below.'
+          ? 'NFC is not available here. Use a USB card reader or type the card ID below.'
           : 'Starting NFC…';
+  const submitTyped = () => {
+    const cardId = typed.trim();
+    if (!cardId) return;
+    void handleCard(cardId);
+    setTyped('');
+  };
 
   return (
     <View style={styles.page}>
@@ -148,26 +154,27 @@ export default function ScanScreen() {
         <Text style={styles.prompt}>{prompt}</Text>
       </LinearGradient>
 
-      {state !== null && state !== 'ready' && (
+      {/*
+        Always shown: a USB (OTG) card reader works like a keyboard, typing the card ID into the
+        focused box and pressing Enter, so the box keeps focus for the next card.
+      */}
+      {state !== null && (
         <View style={styles.typeRow}>
           <TextInput
             value={typed}
             onChangeText={setTyped}
+            onSubmitEditing={submitTyped}
+            submitBehavior="submit"
+            returnKeyType="done"
+            autoFocus
             autoCapitalize="characters"
             autoCorrect={false}
-            placeholder="Card ID"
+            placeholder={state === 'ready' ? 'Or card ID / USB reader' : 'Card ID'}
             accessibilityLabel="Card ID"
             placeholderTextColor={colors.muted}
             style={styles.input}
           />
-          <Button
-            label="Submit"
-            disabled={!typed.trim()}
-            onPress={() => {
-              void handleCard(typed.trim());
-              setTyped('');
-            }}
-          />
+          <Button label="Submit" disabled={!typed.trim()} onPress={submitTyped} />
         </View>
       )}
 

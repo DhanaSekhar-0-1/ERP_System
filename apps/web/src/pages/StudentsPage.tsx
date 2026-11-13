@@ -2,6 +2,7 @@ import { fullName, Student } from '@erp/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Nfc, Search, X } from 'lucide-react';
 import { FormEvent, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { buttonClass, Card, errorText, ghostButtonClass, inputClass, Message, PageHeader } from '../components/ui';
@@ -112,7 +113,9 @@ export function StudentsPage() {
               <tbody>
                 {students.data.items.map((student) => (
                   <tr key={student.id} className="border-t border-line">
-                    <td className="py-2.5 font-semibold">{fullName(student)}</td>
+                    <td className="py-2.5 font-semibold">
+                      <Link to={`/students/${student.id}`} className="text-brand hover:underline">{fullName(student)}</Link>
+                    </td>
                     <td className="py-2.5 text-muted">{student.admissionNo}</td>
                     <td className="py-2.5 font-mono text-xs text-muted">{student.nfcId ?? 'No card'}</td>
                     {canAssign && (

@@ -360,6 +360,95 @@ async function main() {
   const raviLogin = await call(null, 'POST', '/auth/login', { identifier: `ravi.${RUN}@school.example`, password: raviT.firstPassword });
   check('a teacher with an email can also sign in with it', raviLogin.status === 201, raviLogin.status);
 
+  heading('Teacher check-in and check-out');
+  // A fixed school location; points are placed by metres north of it.
+  const SCHOOL = { latitude: 16.2385, longitude: 80.6472 };
+  const near = (metres, accuracy = 20) => ({ latitude: SCHOOL.latitude + metres / 111320, longitude: SCHOOL.longitude, accuracy });
+  await expect('a teacher cannot change check-in settings', teacher, 'PUT', '/staff-attendance/settings', { ...SCHOOL, radiusMeters: 200, lateAfter: '23:59' }, 403);
+  const attendanceRules = (await expect('School Admin sets the school location, radius and late time', admin, 'PUT', '/staff-attendance/settings', { ...SCHOOL, radiusMeters: 200, lateAfter: '23:59' })).data;
+  check('settings saved, location ready', attendanceRules?.locationReady === true && attendanceRules?.radiusMeters === 200 && attendanceRules?.lateAfter === '23:59', attendanceRules);
+  await expect('only a latitude without a longitude is refused', admin, 'PUT', '/staff-attendance/settings', { latitude: 16 }, 400);
+  const lakshmiToken = lakshmiAgain.data?.session?.access_token;
+  const lakshmiToday = (await expect('teacher opens today', lakshmiToken, 'GET', '/staff-attendance/me/today')).data;
+  check('no record yet, rules shown', lakshmiToday?.record === null && lakshmiToday?.locationReady === true && lakshmiToday?.lateAfter === '23:59', lakshmiToday);
+  const far = await call(lakshmiToken, 'POST', '/staff-attendance/check-in', near(1000));
+  check('check-in 1 km away is refused with the distance', far.status === 403 && /(99\d|100\d) m from school/.test(far.error?.message ?? ''), far.error?.message);
+  await expect('a rough location reading is refused', lakshmiToken, 'POST', '/staff-attendance/check-in', near(10, 500), 400);
+  await expect('cannot check out before checking in', lakshmiToken, 'POST', '/staff-attendance/check-out', near(10), 409);
+  const checkedIn = (await expect('teacher checks in 50 m from school', lakshmiToken, 'POST', '/staff-attendance/check-in', near(50), 201)).data;
+  check('on time, distance kept, time recorded', checkedIn?.status === 'PRESENT' && checkedIn?.checkInDistanceM === 50 && /^\d{2}:\d{2}$/.test(checkedIn?.checkInTime ?? ''), checkedIn);
+  await expect('cannot check in twice', lakshmiToken, 'POST', '/staff-attendance/check-in', near(50), 409);
+  const checkedOut = (await expect('teacher checks out', lakshmiToken, 'POST', '/staff-attendance/check-out', near(30), 201)).data;
+  check('check-out time recorded', checkedOut?.checkOutTime && checkedOut?.minutesAtSchool >= 0, checkedOut);
+  await expect('cannot check out twice', lakshmiToken, 'POST', '/staff-attendance/check-out', near(30), 409);
+
+  // Late rule: a check-in after the late time is Late.
+  await expect('School Admin moves the late time to midnight', admin, 'PUT', '/staff-attendance/settings', { lateAfter: '00:00' });
+  const raviFirst = (await call(null, 'POST', '/auth/login', { identifier: raviT.teacherId, password: raviT.firstPassword })).data?.session?.access_token;
+  await expect('second teacher sets a password', raviFirst, 'POST', '/auth/change-password', { currentPassword: raviT.firstPassword, newPassword: `RaviT#${RUN}` });
+  const raviToken = (await call(null, 'POST', '/auth/login', { identifier: raviT.teacherId, password: `RaviT#${RUN}` })).data?.session?.access_token;
+  const lateIn = (await expect('second teacher checks in after the late time', raviToken, 'POST', '/staff-attendance/check-in', near(5), 201)).data;
+  // Late means after the late time; a check-in at exactly 00:00 (a run crossing midnight) is on time.
+  const expectLate = lateIn?.checkInTime !== '00:00' ? 'LATE' : 'PRESENT';
+  check('recorded as Late (after the late time)', lateIn?.status === expectLate, lateIn);
+  await expect('School Admin puts the late time back to 09:15', admin, 'PUT', '/staff-attendance/settings', { lateAfter: '09:15' });
+
+  // The school's view and corrections.
+  await expect('a teacher cannot see everyone', teacher, 'GET', '/staff-attendance', undefined, 403);
+  const todayView = (await expect('School Admin sees teachers today', admin, 'GET', '/staff-attendance')).data;
+  const rowOf = (view, staffId) => view?.teachers?.find((t) => t.staffId === staffId);
+  check('checked-in teacher shows Present with times', rowOf(todayView, lakshmi.id)?.status === 'PRESENT' && rowOf(todayView, lakshmi.id)?.record?.checkOutTime, rowOf(todayView, lakshmi.id));
+  check('late teacher shows Late', rowOf(todayView, raviT.id)?.status === expectLate);
+  check('summary counts the day', todayView?.isToday === true && todayView?.summary?.total >= 2 && todayView?.summary?.present + todayView?.summary?.late >= 2, todayView?.summary);
+  await expect('Principal can see teachers today', principal, 'GET', '/staff-attendance');
+  const testTeacherStaff = (await call(admin, 'GET', '/staff')).data?.find((x) => x.user.email === creds.teacher.email);
+  const yesterday = day(-1);
+  await expect('a correction needs a reason', admin, 'PUT', `/staff-attendance/${testTeacherStaff?.id}`, { date: yesterday, status: 'PRESENT', reason: '' }, 400);
+  await expect('check-out cannot be before check-in', admin, 'PUT', `/staff-attendance/${testTeacherStaff?.id}`, { date: yesterday, status: 'PRESENT', checkInTime: '10:00', checkOutTime: '09:00', reason: 'Forgot phone' }, 400);
+  await expect('no attendance for a future day', admin, 'PUT', `/staff-attendance/${testTeacherStaff?.id}`, { date: day(2), status: 'PRESENT', reason: 'Too early' }, 400);
+  await expect('Principal cannot correct', principal, 'PUT', `/staff-attendance/${testTeacherStaff?.id}`, { date: yesterday, status: 'PRESENT', reason: 'Not allowed' }, 403);
+  const teacherFix = (await expect('School Admin marks a teacher present for yesterday', admin, 'PUT', `/staff-attendance/${testTeacherStaff?.id}`, {
+    date: yesterday, status: 'PRESENT', checkInTime: '08:55', checkOutTime: '16:30', reason: 'Forgot phone at home',
+  })).data;
+  check('correction saved with times and reason', teacherFix?.status === 'PRESENT' && teacherFix?.checkInTime === '08:55' && teacherFix?.checkOutTime === '16:30' && teacherFix?.corrected === true && teacherFix?.minutesAtSchool === 455, teacherFix);
+  const yesterdayView = (await expect('School Admin opens yesterday', admin, 'GET', `/staff-attendance?date=${yesterday}`)).data;
+  check('corrected day shows; teachers with no record show Absent for a past day', rowOf(yesterdayView, testTeacherStaff?.id)?.status === 'PRESENT' && rowOf(yesterdayView, lakshmi.id)?.status === 'ABSENT', [rowOf(yesterdayView, testTeacherStaff?.id)?.status, rowOf(yesterdayView, lakshmi.id)?.status]);
+
+  heading('Attendance dashboard');
+  await expect('a teacher cannot open the dashboard', teacher, 'GET', '/attendance-dashboard', undefined, 403);
+  const dashDay = (await expect('School Admin opens the day', admin, 'GET', `/attendance-dashboard?date=${day(0)}`)).data;
+  const dash8B = dashDay?.sections?.find((s) => s.sectionId === secB.id);
+  check('every section of the year is listed with counts', dash8B && dash8B.students >= 1 && dash8B.notMarked === dash8B.students - dash8B.marked, dash8B);
+  check('the day has a school-wide summary', typeof dashDay?.summary?.students === 'number' && dashDay.summary.students >= dash8B.students, dashDay?.summary);
+  const dashSection = (await expect('School Admin opens 8-B', admin, 'GET', `/attendance-dashboard/sections/${secB.id}?date=${day(0)}`)).data;
+  const raviRow = dashSection?.students?.find((r) => r.studentId === newStudent.id);
+  check('the registered student is listed with a year figure', raviRow?.admissionNo === `E2E-${RUN}` && raviRow?.year && 'percent' in raviRow.year, raviRow);
+  await expect('Principal can open the dashboard too', principal, 'GET', '/attendance-dashboard');
+  const profile = (await expect('School Admin opens a student', admin, 'GET', `/attendance-dashboard/students/${newStudent.id}`)).data;
+  check('student profile has details, masked Aadhaar and years', profile?.admissionNo === `E2E-${RUN}` && profile?.aadhaarMasked?.startsWith('XXXX') && !('aadhaarEncrypted' in (profile ?? {})) && Array.isArray(profile?.years), profile && { ...profile, years: profile.years?.length });
+  await expect('another student cannot open this profile', student, 'GET', `/attendance-dashboard/students/${newStudent.id}`, undefined, 403);
+
+  heading('Teacher leave: half days and no limits');
+  // A school day (not Sunday) a few days ahead, so the checks do not depend on today.
+  let leaveDay = 4;
+  while (new Date(`${day(leaveDay)}T00:00:00Z`).getUTCDay() === 0) leaveDay += 1;
+  const halfDate = day(leaveDay);
+  await expect('a half day must be one date', raviToken, 'POST', '/staff-leaves', { leaveType: 'CASUAL', fromDate: halfDate, toDate: day(leaveDay + 1), session: 'MORNING', reason: 'Doctor visit' }, 400);
+  const halfDay = (await expect('teacher asks for a morning half day', raviToken, 'POST', '/staff-leaves', { leaveType: 'CASUAL', fromDate: halfDate, toDate: halfDate, session: 'MORNING', reason: 'Doctor visit' }, 201)).data;
+  check('a half day counts 0.5', halfDay?.days === 0.5 && halfDay?.session === 'MORNING', halfDay);
+  await expect('School Admin cannot approve teacher leave', admin, 'POST', `/staff-leaves/${halfDay?.id}/approve`, {}, 403);
+  await expect('Principal approves the half day', principal, 'POST', `/staff-leaves/${halfDay?.id}/approve`, {});
+  const awayFrom = (await expect('School Admin lists approved leave from that date', admin, 'GET', `/staff-leaves?status=APPROVED&from=${halfDate}&to=${halfDate}`)).data;
+  check('the half day is in the approved list', awayFrom?.some((l) => l.id === halfDay?.id), awayFrom?.length);
+  const halfView = (await expect('teacher attendance for that day', admin, 'GET', `/staff-attendance?date=${halfDate}`)).data;
+  const raviHalf = halfView?.teachers?.find((t) => t.staffId === raviT.id);
+  check('the dashboard shows the morning half, not full-day leave', raviHalf?.leaveSession === 'MORNING' && raviHalf?.status !== 'ON_LEAVE', raviHalf);
+  const noLimit = (await expect('three sick days with no allowance set (no limits in MVP1)', raviToken, 'POST', '/staff-leaves', { leaveType: 'SICK', fromDate: day(leaveDay + 7), toDate: day(leaveDay + 9), reason: 'Fever' }, 201)).data;
+  check('leave days counted', noLimit?.days >= 2, noLimit?.days);
+  await expect('teacher cancels the pending request', raviToken, 'POST', `/staff-leaves/${noLimit?.id}/cancel`);
+  const studentAway = await expect('School Admin lists student leave from today', admin, 'GET', `/student-leaves?status=APPROVED&from=${day(0)}`);
+  check('student leave list accepts the date filter', Array.isArray(studentAway.data), studentAway.data);
+
   heading('Students, enrollment, guardians (continued)');
   const visible = (await call(teacher, 'GET', '/students?search=TEST-STUDENT-001')).data;
   check('teacher sees students in assigned classes', visible.some((s) => s.id === studentId), visible?.map((s) => s.firstName));
@@ -384,6 +473,35 @@ async function main() {
   const parentPassword = `Parent#${RUN}`;
   await expect('give guardian a parent login', admin, 'POST', `/guardians/${guardian.id}/account`, { email: parentEmail, password: parentPassword });
   const parent = await login(parentEmail, parentPassword);
+
+  heading('School modules');
+  const modulesBefore = (await expect('read the school module switches', admin, 'GET', '/school-modules')).data;
+  check('module list includes exams and parent login', modulesBefore?.modules?.some((m) => m.key === 'exams') && 'parentLogin' in (modulesBefore?.states ?? {}), modulesBefore?.states);
+  await expect('teacher cannot switch modules', teacher, 'PUT', '/school-modules', { modules: { exams: false } }, 403);
+  try {
+    const off = (await expect('switch exams, notices and parent login off', admin, 'PUT', '/school-modules', {
+      modules: { exams: false, announcements: false, parentLogin: false, nonsense: false },
+      registration: { requireNfcCard: false },
+    })).data;
+    check('saved switches come back', off?.states?.exams === false && off.states.announcements === false && off.states.parentLogin === false && off.registration.requireNfcCard === false, off);
+    check('unknown module keys are ignored', off && !('nonsense' in off.states), off?.states);
+    const teacherContext = (await call(teacher, 'GET', '/auth/context')).data;
+    check('signed-in context carries the switches', teacherContext?.modules?.exams === false && teacherContext.modules.fees !== false, teacherContext?.modules);
+    const examsOff = await call(teacher, 'GET', '/marks/my-assessments');
+    check('a switched-off module refuses requests', examsOff.status === 403 && /switched off/i.test(JSON.stringify(examsOff.error)), examsOff);
+    await expect('notices are refused while switched off', student, 'GET', '/announcements', undefined, 403);
+    await expect('attendance still works with modules off', teacher, 'GET', '/staff-attendance/me/today');
+    const parentRefused = await call(null, 'POST', '/auth/login', { identifier: parentEmail, password: parentPassword });
+    check('parent login is refused when the school has none', parentRefused.status === 401 && /parent logins/i.test(JSON.stringify(parentRefused.error)), parentRefused);
+    await expect('an existing parent session is refused too', parent, 'GET', '/me/children', undefined, 403);
+  } finally {
+    await expect('switch everything back on', admin, 'PUT', '/school-modules', {
+      modules: modulesBefore?.states ?? {},
+      registration: modulesBefore?.registration ?? {},
+    });
+  }
+  await expect('exams work again once switched on', teacher, 'GET', '/marks/my-assessments');
+  await expect('parent session works again once switched on', parent, 'GET', '/me/children');
   const children = (await expect('parent lists own children', parent, 'GET', '/me/children')).data;
   check('parent sees the linked child', children?.length === 1 && children[0].id === studentId, children);
   const parentStudents = (await call(parent, 'GET', '/students')).data;

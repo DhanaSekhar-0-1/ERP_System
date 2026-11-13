@@ -1,6 +1,6 @@
 # Feature Status by Role
 
-What is done, what is not, and what comes next for each role, as of 2026-11-10.
+What is done, what is not, and what comes next for each role, as of 2026-11-10 (end of day).
 See [STATUS.md](../STATUS.md) for platform status, [role-scenarios.md](./role-scenarios.md)
 for detailed flows, and [apps/README.md](../apps/README.md) to run the apps.
 
@@ -30,7 +30,7 @@ Android, but their flows have not been checked by hand on a device, so they are 
 | Role | App | Screens today | Biggest gap |
 |---|---|---|---|
 | Super Admin | Web | Every School Admin page | Full access in the API, but the same missing screens as School Admin, and no organization, user or role screens |
-| School Admin | Web | Overview, Classes & Sections, Teacher Assignments, Exams & Reports, Teachers, Students, Attendance, Approvals, Settings | No screens for student registration, fees, timetables, leave or academic years |
+| School Admin | Web | Overview, Classes & Sections, Teacher Assignments, Exams & Reports, Teachers, Students, Attendance, Approvals, Leave, Settings (default subjects, teacher check-in, modules in use: switch off exams, notices, parent login and other non-MVP1 parts) | No screens for student registration, fees, timetables or academic years |
 | Principal | Web | Same pages, read-only where they cannot change things; releases exam sections | No screens for deciding staff leave or approving discounts |
 | Teacher | Web and mobile | My classes, Attendance (class teacher), Marks entry, Slip tests; mobile Attendance, Subjects, Leave, Notices | No homework screens; phone marks entry untested on a device |
 | Student | Mobile | Attendance, Results, Leave, Notices | No homework, fees or timetable screens |
@@ -84,6 +84,7 @@ Runs the school day to day.
 | Feature | API | Screen |
 |---|---|---|
 | Overview: attendance today, weekly trend, students at risk | Done | Done (web) |
+| Attendance dashboard: day by section, teachers today with corrections, year-to-date % per student, student details with monthly attendance | Done | Done (web) |
 | Classes and sections: create, rename, delete when empty; Section A and default subjects are added automatically | Done | Done (web) |
 | Per-section subjects: add, rename, remove, switch optional ones on and off | Done | Done (web) |
 | Default subject list for new sections (Sanskrit optional) | Done | Done (web) |
@@ -124,7 +125,7 @@ Oversight and final approval.
 | Release approved exam sections, one at a time or all approved at once; send back | Done | Done (web) |
 | Approve Tier 3 changes; give the Principal's approval on Tier 4 | Done | Done (web) |
 | Approve fee discounts and fee structures: the only role that can, never its own request | Done | Not built |
-| Staff leave decisions (only the Principal; a rejection needs a reason); student leave | Done | Not built |
+| Staff leave decisions (only the Principal; a rejection needs a reason); student leave | Done | Done (web Leave page) |
 | Timetables and substitutes | Done | Not built |
 | Complaints, announcements, homework | Done | Not built |
 | Audit logs, reports, analytics | Done | Not built |
@@ -143,6 +144,7 @@ by the School Admin applies at once.
 | Feature | API | Screen |
 |---|---|---|
 | Choose own password after signing in with the first password | Done | Done (web); checked in the mobile web preview |
+| Check in and out at school (location, late time) | Done | Built, unverified (mobile; checked in the web preview) |
 | My classes: own subjects and class-teacher sections | Done | Done (web); Built, unverified (mobile) |
 | Daily attendance, only as class teacher of the section | Done | Done (web); Built, unverified (mobile) |
 | NFC or typed card attendance | Done | Built, unverified (mobile); no real card tried |
@@ -154,7 +156,9 @@ by the School Admin applies at once.
 | Mark corrections after submission (Tier 3) or release (Tier 4) | Done | Not built |
 | Homework: create, publish, grade, return | Done | Not built |
 | View assigned students (registering students is for the School Admin and Super Admin since 2026-11-10) | Done | Not built |
-| Own timetable, substitute duties, own leave | Done | Not built |
+| Own leave: request (full or half day), see decisions and reasons, cancel while pending | Done | Done (web); Built, unverified (mobile) |
+| Decide student leave as class teacher | Done | Done (web); Built, unverified (mobile) |
+| Own timetable, substitute duties | Done | Not built |
 
 **Cannot do:** edit student details, change classes, sections, subjects or assignments, or
 mark attendance for a section where they are not the class teacher.
@@ -241,17 +245,16 @@ requests and Aadhaar Reveal; fee screens in MVP3.
 
 ## Features not built for any role
 
-1. Staff attendance: teacher check-in on the phone (plan: MVP1; NFC later).
-2. Salary, salary proof and bank details (plan: MVP2); salary payments (plan: MVP3).
-3. Announcement banner with images, types and end dates (plan: MVP2).
-4. Year-end promotion with Principal review of failed students, and the leaving and TC flow
+1. Salary, salary proof and bank details (plan: MVP2); salary payments (plan: MVP3).
+2. Announcement banner with images, types and end dates (plan: MVP2).
+3. Year-end promotion with Principal review of failed students, and the leaving and TC flow
    (plan: MVP2).
-5. Sports and events.
-6. Lesson planning and syllabus tracking.
-7. Medical records and consent (DPDP Act).
-8. GPS bus tracking.
-9. WhatsApp Business notifications.
-10. OCR mark entry and biometric attendance (later phase).
+4. Sports and events.
+5. Lesson planning and syllabus tracking.
+6. Medical records and consent (DPDP Act).
+7. GPS bus tracking.
+8. WhatsApp Business notifications.
+9. OCR mark entry and biometric attendance (later phase).
 
 ## Built but not verified
 
@@ -263,7 +266,9 @@ requests and Aadhaar Reveal; fee screens in MVP3.
 
 ## What comes next
 
-The MVP1 build order is in [mvp-plan.md](./mvp-plan.md#5-mvp1-build-order). Alongside it:
+The MVP1 build order is in [mvp-plan.md](./mvp-plan.md#5-mvp1-build-order); steps 1–7 are done
+and step 8 is next. Where to resume: [STATUS.md section 0](../STATUS.md#0-resume-here-stopped-2026-11-10-end-of-day).
+Alongside it:
 
 1. Change the passwords that are readable in the repository's history.
 2. Host the backend, web and a separate client database for the pilot.

@@ -1,4 +1,4 @@
-import { colors } from '@erp/shared';
+import { colors, moduleOn } from '@erp/shared';
 import { Redirect, Tabs } from 'expo-router';
 import { useAuth } from '../../src/auth';
 import { tabIcon } from '../../src/ui';
@@ -15,7 +15,7 @@ export default function FamilyLayout() {
       />
       <Tabs.Screen
         name="results"
-        options={{ title: 'Results', tabBarIcon: tabIcon('ribbon') }}
+        options={{ title: 'Results', tabBarIcon: tabIcon('ribbon'), href: moduleOn(user, 'exams') ? undefined : null }}
       />
       <Tabs.Screen
         name="leave"
@@ -23,7 +23,7 @@ export default function FamilyLayout() {
       />
       <Tabs.Screen
         name="notices"
-        options={{ title: 'Notices', tabBarIcon: tabIcon('megaphone') }}
+        options={{ title: 'Notices', tabBarIcon: tabIcon('megaphone'), href: moduleOn(user, 'announcements') ? undefined : null }}
       />
     </Tabs>
   );

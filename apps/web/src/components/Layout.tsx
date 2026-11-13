@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BookOpenCheck,
   CalendarCheck,
+  CalendarOff,
   ClipboardList,
   FilePen,
   GraduationCap,
@@ -16,6 +17,7 @@ import {
   Users,
 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { moduleOn, type SchoolModuleKey } from '@erp/shared';
 import { api } from '../api';
 import { useAuth } from '../auth';
 
@@ -23,6 +25,8 @@ interface NavItem {
   to: string;
   label: string;
   icon: typeof Users;
+  /** Hidden when the school switches this module off. */
+  module?: SchoolModuleKey;
 }
 
 const LEADER_NAV: { title?: string; items: NavItem[] }[] = [
@@ -32,7 +36,7 @@ const LEADER_NAV: { title?: string; items: NavItem[] }[] = [
     items: [
       { to: '/classes', label: 'Classes & Sections', icon: LayoutGrid },
       { to: '/assignments', label: 'Teacher Assignments', icon: Network },
-      { to: '/exams', label: 'Exams & Reports', icon: ClipboardList },
+      { to: '/exams', label: 'Exams & Reports', icon: ClipboardList, module: 'exams' },
     ],
   },
   {
@@ -46,6 +50,7 @@ const LEADER_NAV: { title?: string; items: NavItem[] }[] = [
     title: 'Daily',
     items: [
       { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
+      { to: '/leave', label: 'Leave', icon: CalendarOff },
       { to: '/approvals', label: 'Approvals', icon: ShieldCheck },
     ],
   },
@@ -57,8 +62,9 @@ const TEACHER_NAV: { title?: string; items: NavItem[] }[] = [
     items: [
       { to: '/', label: 'My classes', icon: BookOpenCheck },
       { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
-      { to: '/marks', label: 'Marks entry', icon: FilePen },
-      { to: '/slip-tests', label: 'Slip tests', icon: ClipboardList },
+      { to: '/marks', label: 'Marks entry', icon: FilePen, module: 'exams' },
+      { to: '/slip-tests', label: 'Slip tests', icon: ClipboardList, module: 'exams' },
+      { to: '/leave', label: 'Leave', icon: CalendarOff },
     ],
   },
 ];
@@ -67,7 +73,9 @@ export function Layout({ variant }: { variant: 'leader' | 'teacher' }) {
   const { user, signOut } = useAuth();
   const leader = variant === 'leader';
   const { data: approvals } = useQuery({ queryKey: ['approvals'], queryFn: api.approvals, enabled: leader });
-  const nav = leader ? LEADER_NAV : TEACHER_NAV;
+  const nav = (leader ? LEADER_NAV : TEACHER_NAV)
+    .map((group) => ({ ...group, items: group.items.filter((item) => !item.module || moduleOn(user, item.module)) }))
+    .filter((group) => group.items.length > 0);
   const role = user?.roles.find((item) => ['Super Admin', 'School Admin', 'Principal', 'Teacher'].includes(item)) ?? user?.roles[0];
 
   return (

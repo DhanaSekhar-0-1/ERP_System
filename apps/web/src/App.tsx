@@ -1,3 +1,4 @@
+import { moduleOn } from '@erp/shared';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth';
 import { Layout } from './components/Layout';
@@ -7,12 +8,14 @@ import { AttendancePage } from './pages/AttendancePage';
 import { ClassDetailPage } from './pages/ClassDetailPage';
 import { ClassesPage } from './pages/ClassesPage';
 import { ExamsPage } from './pages/ExamsPage';
+import { LeaderLeavePage, TeacherLeavePage } from './pages/LeavePages';
 import { LoginPage } from './pages/LoginPage';
 import { MobileOnlyPage } from './pages/MobileOnlyPage';
 import { NewPasswordPage } from './pages/NewPasswordPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StudentsPage } from './pages/StudentsPage';
+import { StudentDetailPage } from './pages/StudentDetailPage';
 import { TeachersPage } from './pages/TeachersPage';
 import {
   MarkSheetPage,
@@ -37,6 +40,7 @@ export function App() {
   if (!user) return <LoginPage />;
   // Still on the first password from the school: nothing else works until it is changed.
   if (user.mustChangePassword) return <NewPasswordPage />;
+  const exams = moduleOn(user, 'exams');
 
   if (user.roles.some((role) => LEADER_ROLES.includes(role))) {
     return (
@@ -46,10 +50,12 @@ export function App() {
           <Route path="classes" element={<ClassesPage />} />
           <Route path="classes/:classId" element={<ClassDetailPage />} />
           <Route path="assignments" element={<AssignmentsPage />} />
-          <Route path="exams" element={<ExamsPage />} />
+          {exams && <Route path="exams" element={<ExamsPage />} />}
           <Route path="teachers" element={<TeachersPage />} />
           <Route path="students" element={<StudentsPage />} />
+          <Route path="students/:studentId" element={<StudentDetailPage />} />
           <Route path="attendance" element={<AttendancePage />} />
+          <Route path="leave" element={<LeaderLeavePage />} />
           <Route path="approvals" element={<ApprovalsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
@@ -65,9 +71,14 @@ export function App() {
         <Route element={<Layout variant="teacher" />}>
           <Route index element={<MyClassesPage />} />
           <Route path="attendance" element={<TeacherAttendancePage />} />
-          <Route path="marks" element={<MarksListPage />} />
-          <Route path="marks/:assessmentId" element={<MarkSheetPage />} />
-          <Route path="slip-tests" element={<SlipTestPage />} />
+          {exams && (
+            <>
+              <Route path="marks" element={<MarksListPage />} />
+              <Route path="marks/:assessmentId" element={<MarkSheetPage />} />
+              <Route path="slip-tests" element={<SlipTestPage />} />
+            </>
+          )}
+          <Route path="leave" element={<TeacherLeavePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

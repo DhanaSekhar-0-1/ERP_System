@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { FormError } from '../components/Dialog';
+import { SchoolModuleSettings } from '../components/SchoolModuleSettings';
+import { TeacherCheckInSettings } from '../components/TeacherCheckInSettings';
 import { buttonClass, Card, errorText, ghostButtonClass, inputClass, Message, PageHeader } from '../components/ui';
 
 interface Row {
@@ -76,6 +78,12 @@ export function SettingsPage() {
         )}
         <div className="mt-2"><FormError error={save.error} /></div>
       </Card>
+      <div className="mt-6">
+        <TeacherCheckInSettings />
+      </div>
+      <div className="mt-6">
+        <SchoolModuleSettings />
+      </div>
     </>
   );
 }

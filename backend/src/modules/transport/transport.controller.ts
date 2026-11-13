@@ -1,3 +1,4 @@
+import { SchoolModule } from '../../common/school-modules/school-modules';
 import {
   Body,
   Controller,
@@ -27,6 +28,7 @@ import {
 } from './dto/transport.dto';
 import { TransportService } from './transport.service';
 
+@SchoolModule('transport')
 @Controller('transport')
 export class TransportController {
   constructor(private readonly transport: TransportService) {}
@@ -157,6 +159,7 @@ export class TransportController {
   }
 }
 
+@SchoolModule('transport')
 @Controller('students/:studentId/transport')
 export class StudentTransportController {
   constructor(private readonly transport: TransportService) {}

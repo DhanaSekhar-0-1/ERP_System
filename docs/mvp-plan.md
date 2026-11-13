@@ -171,6 +171,73 @@ Any step can send it back with a reason; the family can cancel while it is pendi
   sends a notification to its audience.
 - Only Super Admin, Principal and Admin post emergencies, which stay pinned in red.
 
+### Pilot setup (MVP1 step 8, decided 2026-11-13)
+
+- **Module switches per school** in web Settings, enforced by the server (a switched-off module's
+  screens are hidden and its API refuses requests). MVP1 on: attendance, teacher check-in,
+  student and teacher registration, leave. Off for the pilot: exams and marks (with slip tests,
+  results and report cards), notices and announcements, homework, fees, timetable, transport,
+  library, assets, complaints, certificates, and the **parent login**. A "Use the MVP1 set"
+  button applies this. Schools that never set switches keep everything on, so nothing
+  changes for existing schools or the test suite. Turning on exams for MVP2 is a setting.
+- **How the switches work (built in 8a):** saved in school settings metadata (`modules`,
+  `registration`); `GET/PUT /school-modules` (PUT: School Admin or Super Admin, audited);
+  controllers are tagged `@SchoolModule('exams')` and the authorization guard refuses them with
+  403 "... is switched off for this school". `/auth/context` returns `modules`, so the web hides
+  Exams & Reports, Marks entry and Slip tests, and the phone hides the Subjects/marks, Results and
+  Notices tabs. With the parent login off, a Parent-only account cannot sign in (401) and an
+  open parent session is refused (403). The Settings page has a "Modules in use" card with the
+  "Use the MVP1 set" button and the Aadhaar/NFC registration switches.
+- **NFC card optional** for the demo and pilot (the registration switch `requireNfcCard` off);
+  NFC is tested later by the developer with an NFC reader on the phone's USB (OTG) port. Such
+  readers usually type the card number like a keyboard, so the phone screen must accept a typed
+  card ID.
+- **Hosting:** backend on Render, web on Vercel, and a **new Supabase project** only for the
+  school's real data (never the development database). Accounts and payment are the user's;
+  the developer prepares the configuration files and a step-by-step guide.
+- **Hosting details (decided 2026-11-13, step 8b):** Render **Free** plan for the pilot (it
+  sleeps after 15 idle minutes and the first request then waits about a minute; an optional free
+  uptime ping keeps it awake; Starter at about $7/month removes this). Free default addresses
+  (`*.onrender.com`, `*.vercel.app`); a custom domain can be added later without code changes.
+  Supabase in Mumbai (ap-south-1), Render in Singapore (nearest region).
+- **First accounts on the new database:** one setup script (`npm run pilot:setup`) creates the
+  organisation, the school, the Super Admin, a Principal and a School Admin with first passwords
+  (shown once; changed at first login), and applies the MVP1 module set with the NFC card
+  optional. A web screen for creating Principal/Admin/Accountant accounts is not in MVP1.
+- **Phone app:** an Android **APK shared directly** (link or WhatsApp), built with Expo EAS.
+- **Device test:** the developer tests on their own phone with a checklist (first password,
+  check-in at school, leave, attendance marking; NFC when the reader is connected).
+
+### Leave (MVP1, decided 2026-11-12)
+
+- **Teacher leave** is requested on the **phone and the web**: type (casual, sick, earned,
+  unpaid), dates, reason, and for a single day **full day, morning half or afternoon half**
+  ("evening" means the afternoon half of the school day). A half day counts as 0.5 days and can
+  only be one date.
+- **No leave limits in MVP1:** leave is recorded and the Principal decides each request;
+  balances are not checked and not shown. The balance rules stay in the code behind a school
+  setting (off by default) for later.
+- **The Principal decides** teacher leave on the web: approve, or reject with a reason. The
+  teacher is notified and sees the result and the reason.
+- **Student leave** is requested by the student or family on the phone. The **class teacher**
+  decides it on the **phone and the web** (teacher area). The Admin and Principal can view
+  student leave on the web; they do not need to decide it.
+- **The Admin sees approved leave** (teachers and students, today and the coming days) on the
+  web, so cover can be arranged. Pending requests are visible to the Principal.
+- **With check-in:** a teacher on full-day leave cannot check in. On a **morning half day** the
+  teacher checks in after lunch and is not marked late; on an **afternoon half day** the teacher
+  checks in as usual and may check out early. The dashboard shows "Half day (morning)" or
+  "Half day (afternoon)".
+- Half days are for teachers only in MVP1; student leave stays full days.
+- **Built (2026-11-13):** `staff_leaves.session` and fractional `days` (migration
+  `20261112100000_staff_leave_half_days`); the balance rule only applies when school settings
+  metadata has `leave.enforceBalance: true`; `from`/`to` filters on both leave lists. Web: a
+  Leave page for leaders (teacher requests with Approve/Reject for the Principal, who is away
+  today and coming days, student requests waiting) and for teachers (request with full or half
+  day, my leave with cancel, student requests to approve or reject). Phone: "Ask for leave" and
+  "My leave" on the teacher Leave tab, above student requests. Half days show on the attendance
+  dashboard, and a morning half day is never marked late at check-in.
+
 ### Teacher attendance (MVP1, decided 2026-11-10)
 
 Teachers check in and check out on the phone app. NFC check-in can come later.
@@ -194,6 +261,14 @@ Teachers check in and check out on the phone app. NFC check-in can come later.
   latitude and longitude), radius, and the late time.
 - **Privacy:** only the distance from school and whether it was inside the radius are kept, not
   the raw location.
+- **Built (2026-11-10):** table `staff_attendance` (migration `20261110130000_staff_attendance`);
+  routes under `/staff-attendance`: `me/today`, `check-in`, `check-out` (teachers),
+  `GET /` for a day's list with a summary (School Admin, Principal, Super Admin), `PUT /:staffId`
+  for corrections and `GET`/`PUT settings` (School Admin, Super Admin); permissions
+  `staff-attendance:check-in`, `:read`, `:manage`. Phone: "My attendance today" card on the
+  teacher home (expo-location). Web: "Teacher check-in" card on Settings. The correction screen
+  is part of the dashboard (6b). Days are counted in the school's time zone from school settings
+  (Asia/Kolkata when unset).
 
 ### Admin attendance dashboard (MVP1)
 
@@ -206,6 +281,13 @@ One web page for the School Admin, Principal and Super Admin:
 - **Overall %:** each student's attendance for the academic year so far, counted from the
   admission date for students who joined mid-year.
 - **Student details page:** click a student to see their details and monthly attendance.
+- **Built (2026-11-10):** web Attendance page (date picker, summary tiles, Teachers today with a
+  Correct dialog, sections with a class filter, a section's students with today's status and
+  year-to-date %, CSV export kept) and `/students/:id` details page. Routes
+  `GET /attendance-dashboard`, `/attendance-dashboard/sections/:id`,
+  `/attendance-dashboard/students/:id` (leaders; the student route also follows the normal
+  student access rules). The % counts only marked days, leaving out leave and excused days, so
+  a student who joined mid-year is counted from admission; below 75% shows in red.
 
 ---
 
@@ -223,7 +305,7 @@ Attendance, registering people, and leave.
 6. Teacher check-in and check-out on the phone, only at school (location), with a late time.
 7. Admin dashboard: today's attendance by class and section, overall %, teachers present, a
    student details page.
-8. Leave: student to class teacher (built); teacher to Principal only (built 2026-11-10).
+8. Leave: student to class teacher (phone and web); teacher to Principal only (phone and web, half days allowed); no leave limits in MVP1.
 9. Hide the parent login and every module not listed here.
 10. Test the phone app by hand on real devices.
 
@@ -255,10 +337,12 @@ Branch `feature/mvp1`, one commit per step, end-to-end suite run each time.
 | 4 | Student creation: admission-number login, first password, forced change, import endpoint with a dry run | Done 2026-11-10 |
 | 5 | Teacher registration: app-made ID, subjects | Done 2026-11-10 |
 | 5a | "Choose a new password" screen in the web and phone apps (the server already blocks other routes until the first password changes) | Done 2026-11-10 |
-| 6a | Teacher check-in and check-out (location, late time, Admin corrections, settings) | Next |
-| 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | |
-| 7 | Leave screens on web and phone | |
-| 8 | Hide parent login and unused modules; host; Android build; device test | |
+| 6a | Teacher check-in and check-out (location, late time, Admin corrections, settings) | Done 2026-11-10 |
+| 6b | Admin attendance dashboard (today by class and section, teachers today, overall %, student details) | Done 2026-11-10 |
+| 7 | Leave (decided 2026-11-12, see "Leave" in section 3): teacher request on phone and web with half days; Principal decides teacher leave on the web; class teacher decides student leave on the web too; Admin sees approved leave; no leave limits in MVP1 | Done 2026-11-13 |
+| 8a | Module switches per school (parent login and non-MVP1 modules off; NFC optional) | Done 2026-11-13 |
+| 8b | Hosting files and guide: Render (backend), Vercel (web), new Supabase project ([hosting-guide.md](./hosting-guide.md), `render.yaml`, `apps/web/vercel.json`, `npm run pilot:setup`) | Done 2026-11-13 |
+| 8c | Android APK (Expo EAS) and the device-test checklist ([android-apk-guide.md](./android-apk-guide.md), [device-test-checklist.md](./device-test-checklist.md), `apps/mobile/eas.json`; scan screen always takes a typed or USB-reader card ID) | Done 2026-11-13 |
 
 Admin and Super Admin work on the **web**; the phone app is for teachers and students.
 
@@ -314,4 +398,16 @@ required.
 ## 8. Open items
 
 - The first-password pattern can be guessed by classmates; the forced change at first login is
-  what keeps it safe, so it must not be skippable.
+  what keeps it safe, so it must not be skippable (built: the server refuses every other route,
+  and both apps show only the choose-a-new-password screen).
+- A fake-location app can cheat teacher check-in; the dashboard and corrections are the check.
+- Packages updated 2026-11-13 (`npm audit fix`, no breaking changes): the critical
+  `proxy-addr` and the high `multer`/`@nestjs/platform-express` issues are fixed. Left on purpose:
+  `deepmerge-ts` (high) inside the Prisma 6 CLI config loader, fixed only in Prisma 7, a major
+  upgrade; it runs at build/migrate time, not while the API serves requests. Dev-only build tools
+  (moderate/low) and Expo's build-time `minimatch` (its fix would downgrade Expo to 52) also stay.
+  Revisit with the Prisma 7 upgrade after the pilot.
+- Nothing has been tried on a real phone yet: phone screens, check-in at school, NFC cards.
+- Suggested, not yet confirmed: grade instead of percentage, board, "TC pending" and "first
+  school" for students new to the school (section 3).
+- Where work stopped and how to resume: [STATUS.md section 0](../STATUS.md#0-resume-here-stopped-2026-11-10-end-of-day).

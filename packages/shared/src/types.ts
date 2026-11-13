@@ -20,6 +20,33 @@ export interface UserContext {
   guardianId: string | null;
   /** Still on a generated first password: the apps show only the choose-a-new-password screen. */
   mustChangePassword: boolean;
+  /** The school's module switches; a module missing here is on. */
+  modules?: Partial<Record<SchoolModuleKey, boolean>>;
+}
+
+export type SchoolModuleKey =
+  | 'exams'
+  | 'announcements'
+  | 'homework'
+  | 'fees'
+  | 'timetable'
+  | 'transport'
+  | 'library'
+  | 'assets'
+  | 'complaints'
+  | 'certificates'
+  | 'parentLogin';
+
+/** True unless the user's school has switched this module off. */
+export function moduleOn(user: Pick<UserContext, 'modules'> | null | undefined, key: SchoolModuleKey): boolean {
+  return user?.modules?.[key] !== false;
+}
+
+/** GET/PUT /school-modules: which parts of the app the school uses, and the registration switches. */
+export interface SchoolModulesView {
+  states: Record<SchoolModuleKey, boolean>;
+  modules: { key: SchoolModuleKey; label: string; description: string; enabled: boolean; inMvp1: boolean }[];
+  registration: { requireAadhaar: boolean; requireNfcCard: boolean };
 }
 
 export interface StudentName {
@@ -133,6 +160,35 @@ export interface StudentLeave {
   status: LeaveStatus;
   decisionNote: string | null;
   student: { id: string; firstName: string; lastName: string | null; admissionNo?: string };
+}
+
+export type StaffLeaveType = 'CASUAL' | 'SICK' | 'EARNED' | 'UNPAID';
+/** Full day, or the morning or afternoon half of a single day. */
+export type LeaveSession = 'FULL_DAY' | 'MORNING' | 'AFTERNOON';
+
+export interface StaffLeave {
+  id: string;
+  leaveType: StaffLeaveType;
+  fromDate: string;
+  toDate: string;
+  /** School days covered; 0.5 for a half day. */
+  days: number;
+  session: LeaveSession;
+  reason: string;
+  status: LeaveStatus;
+  decisionNote: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  staff: { id: string; employeeNo: string; user: { id: string; displayName: string } };
+}
+
+/** Filters for leave lists; `from`/`to` keep leave that overlaps the window. */
+export interface LeaveQuery {
+  status?: LeaveStatus;
+  from?: string;
+  to?: string;
+  staffId?: string;
+  studentId?: string;
 }
 
 export interface ApprovalRequest {
@@ -389,3 +445,136 @@ export interface Paged<T> {
   total: number;
   totalPages: number;
 }
+
+export type StaffAttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'ON_LEAVE';
+
+/** One teacher's day; times are school-local HH:MM. */
+export interface StaffAttendanceRecord {
+  id: string;
+  date: string;
+  status: StaffAttendanceStatus;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  minutesAtSchool: number | null;
+  checkInDistanceM: number | null;
+  checkOutDistanceM: number | null;
+  corrected: boolean;
+  correctionReason: string | null;
+}
+
+/** What the teacher's phone shows for today. */
+export interface StaffAttendanceToday {
+  date: string;
+  record: StaffAttendanceRecord | null;
+  onLeave: boolean;
+  /** MORNING or AFTERNOON when the teacher has an approved half day today. */
+  halfDayLeave: 'MORNING' | 'AFTERNOON' | null;
+  lateAfter: string;
+  radiusMeters: number;
+  locationReady: boolean;
+}
+
+export interface StaffAttendanceSettings {
+  timeZone: string;
+  latitude: number | null;
+  longitude: number | null;
+  radiusMeters: number;
+  lateAfter: string;
+  locationReady: boolean;
+}
+
+/** One row of the school's teacher attendance for a day. */
+export interface StaffAttendanceRow {
+  staffId: string;
+  teacherId: string;
+  name: string;
+  phone: string | null;
+  subjects: string[];
+  status: StaffAttendanceStatus | 'NOT_CHECKED_IN';
+  record: StaffAttendanceRecord | null;
+  leaveType: string | null;
+  leaveSession: LeaveSession | null;
+}
+
+export interface StaffAttendanceDay {
+  date: string;
+  isToday: boolean;
+  lateAfter: string;
+  summary: { total: number; present: number; late: number; onLeave: number; absent: number; notCheckedIn: number };
+  teachers: StaffAttendanceRow[];
+}
+
+/** Where the device says it is; only the distance from school is stored. */
+export interface DeviceLocation {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+}
+
+/** Counts of marked days; percent leaves out leave and excused days (null when nothing counted). */
+export interface AttendanceCounts {
+  present: number;
+  late: number;
+  absent: number;
+  onLeave: number;
+  excused: number;
+  percent: number | null;
+}
+
+export interface DashboardSection extends AttendanceCounts {
+  sectionId: string;
+  classId: string;
+  label: string;
+  className: string;
+  sectionName: string;
+  students: number;
+  marked: number;
+  notMarked: number;
+}
+
+export interface AttendanceDashboardDay {
+  date: string;
+  summary: AttendanceCounts & { students: number; marked: number; notMarked: number };
+  sections: DashboardSection[];
+}
+
+export interface DashboardSectionStudents {
+  date: string;
+  sectionId: string;
+  label: string;
+  students: {
+    studentId: string;
+    name: string;
+    admissionNo: string;
+    rollNumber: string | null;
+    status: AttendanceStatus | null;
+    year: AttendanceCounts;
+  }[];
+}
+
+export interface StudentAttendanceProfile {
+  id: string;
+  admissionNo: string;
+  firstName: string;
+  lastName: string | null;
+  gender: Gender | null;
+  dateOfBirth: string | null;
+  admissionDate: string | null;
+  admissionType: 'NEW_TO_SCHOOL' | 'EXISTING' | null;
+  bloodGroup: string | null;
+  address: string | null;
+  nfcId: string | null;
+  aadhaarMasked: string | null;
+  aadhaarEnrolmentNo: string | null;
+  isArchived: boolean;
+  guardians: { isPrimary: boolean; guardian: { name: string; phone: string | null; relation: string | null } }[];
+  years: {
+    academicYear: { id: string; name: string; isActive: boolean };
+    label: string;
+    rollNumber: string | null;
+    status: string;
+    overall: AttendanceCounts;
+    months: (AttendanceCounts & { month: string })[];
+  }[];
+}
+

@@ -1,3 +1,4 @@
+import { SchoolModule } from '../../common/school-modules/school-modules';
 import {
   Body,
   Controller,
@@ -22,6 +23,7 @@ import {
 } from './dto/complaints.dto';
 import { ComplaintsService } from './complaints.service';
 
+@SchoolModule('complaints')
 @Controller('feedback')
 export class FeedbackController {
   constructor(private readonly complaints: ComplaintsService) {}
@@ -55,6 +57,7 @@ export class FeedbackController {
   }
 }
 
+@SchoolModule('complaints')
 @Controller('complaints')
 export class ComplaintsController {
   constructor(private readonly complaints: ComplaintsService) {}

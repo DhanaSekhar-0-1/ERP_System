@@ -1,3 +1,4 @@
+import { SchoolModule } from '../../common/school-modules/school-modules';
 import {
   Body,
   Controller,
@@ -23,6 +24,7 @@ import {
 } from './library.dto';
 import { LibraryService } from './library.service';
 
+@SchoolModule('library')
 @Controller('library')
 export class LibraryController {
   constructor(private readonly library: LibraryService) {}
@@ -98,6 +100,7 @@ export class LibraryController {
   }
 }
 
+@SchoolModule('library')
 @Controller('students/:studentId/library-history')
 export class StudentLibraryController {
   constructor(private readonly library: LibraryService) {}

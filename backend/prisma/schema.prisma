@@ -27,6 +27,14 @@ enum AdmissionType {
   EXISTING
 }
 
+/// A teacher's day: checked in on time, late, absent, or on approved leave.
+enum StaffAttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  ON_LEAVE
+}
+
 enum EnrollmentStatus {
   ACTIVE
   PROMOTED
@@ -134,6 +142,13 @@ enum LeaveStatus {
   APPROVED
   REJECTED
   CANCELLED
+}
+
+/// Which part of the day a teacher's leave covers. Half days are a single date and count 0.5.
+enum LeaveSession {
+  FULL_DAY
+  MORNING
+  AFTERNOON
 }
 
 enum StaffLeaveType {
@@ -281,6 +296,7 @@ model School {
   syncBatches         SyncBatch[]
   securityEvents      SecurityEvent[]
   idSequences         IdSequence[]
+  staffAttendance     StaffAttendance[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -629,6 +645,7 @@ model StaffProfile {
   homework           Homework[]
   timetableSlots     TimetableSlot[]
   leaves             StaffLeave[]
+  attendance         StaffAttendance[]
   leaveEntitlements  LeaveEntitlement[]
   substituteOriginal SubstituteRequest[] @relation("SubstituteOriginal")
   substituteAssigned SubstituteRequest[] @relation("SubstituteAssigned")
@@ -1111,7 +1128,9 @@ model StaffLeave {
   leaveType    StaffLeaveType      @map("leave_type")
   fromDate     DateTime            @map("from_date") @db.Date
   toDate       DateTime            @map("to_date") @db.Date
-  days         Int
+  /// School days covered; 0.5 for a half day.
+  days         Float
+  session      LeaveSession        @default(FULL_DAY)
   reason       String
   status       LeaveStatus         @default(PENDING)
   decidedById  String?             @map("decided_by_id") @db.Uuid
@@ -1626,4 +1645,30 @@ model IdSequence {
 
   @@id([schoolId, kind])
   @@map("id_sequences")
+}
+
+/// One record per teacher per school day (MVP1 teacher check-in, docs/mvp-plan.md). Only the
+/// distance from school is kept, never the raw location.
+model StaffAttendance {
+  id                String                @id @default(uuid()) @db.Uuid
+  schoolId          String                @map("school_id") @db.Uuid
+  staffId           String                @map("staff_id") @db.Uuid
+  /// The school-local date of the day.
+  date              DateTime              @db.Date
+  status            StaffAttendanceStatus
+  checkInAt         DateTime?             @map("check_in_at")
+  checkOutAt        DateTime?             @map("check_out_at")
+  checkInDistanceM  Int?                  @map("check_in_distance_m")
+  checkOutDistanceM Int?                  @map("check_out_distance_m")
+  /// Set when the School Admin or Super Admin marked or changed the day.
+  correctedById     String?               @map("corrected_by_id") @db.Uuid
+  correctionReason  String?               @map("correction_reason")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @default(now()) @updatedAt @map("updated_at")
+  school            School                @relation(fields: [schoolId], references: [id])
+  staff             StaffProfile          @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, date])
+  @@index([schoolId, date])
+  @@map("staff_attendance")
 }
