@@ -37,6 +37,19 @@ steps 1–7 are done; **step 8 is next**.
 deleted. Teacher "ravikatari" (42124) is the user's own and must be kept. A trial school "Pilot Trial School" (PILOT-TEST, logins `pilot.*@erp.local`) was made on 2026-11-13 to test `pilot:setup`; it is kept like the rest. Agreed for later: make
 the e2e suite reuse one test parent and deactivate/archive what each run creates.
 
+**Resume here (stopped 2026-11-14):** hosting is live and a demo school exists; the next job is
+the **Android APK**. State:
+- Expo: signed in on this computer as `dhana9572` (Google account; use `npx eas-cli@latest login
+  --device` if asked again). App linked as `@dhana9572/school-erp` (projectId in
+  `apps/mobile/app.json`, commit `0f49669`). Android signing key created and kept by Expo.
+- A first build (`744883b5-9713-48ec-bb67-f8f31438ab9c`, profile `pilot`) was queued on 2026-11-14 and
+  left running. Its upload wrongly included the stale local `apps/mobile/android` folder (1.4 GB), so
+  it may not reflect `app.json` (e.g. the location permission). Since then the root `.gitignore`
+  excludes that folder (`97212fd`). **Tomorrow: run a fresh build** in `apps/mobile`:
+  `npx eas-cli@latest build --platform android --profile pilot`, check its log shows a prebuild from
+  `app.json`, then download the APK and run docs/device-test-checklist.md.
+- Demo school logins (first passwords) are in git-ignored `pilot-first-logins.txt`.
+
 **Pilot hosting (set up 2026-11-14):** web https://school-erp-tan-zeta.vercel.app (Vercel project
 `school-erp`, root `apps/web`, deploys from `main`); API https://school-erp-api-stf8.onrender.com
 (Render Blueprint `school-erp`, service `school-erp-api`, Free, Singapore, deploys `feature/mvp1`,
