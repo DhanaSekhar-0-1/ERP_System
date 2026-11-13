@@ -42,7 +42,7 @@ the e2e suite reuse one test parent and deactivate/archive what each run creates
 (Render Blueprint `school-erp`, service `school-erp-api`, Free, Singapore, deploys `feature/mvp1`,
 auto-deploy off); database: Supabase project `school-erp-copilot` (`nzvucrhdhxibliytyiwn`, Mumbai),
 public sign-ups off. Local settings in `backend/.env.pilot` (git-ignored). `CORS_ORIGINS` is the
-Vercel address. Not done yet: `npm run pilot:setup` (school and first logins), the APK build.
+Vercel address. Demo school created 2026-11-14 ("Demo Public School", DEMO; first passwords in git-ignored `pilot-first-logins.txt`). Not done yet: the real school, the APK build.
 `feature/mvp1` was merged into `main` by the user (PR #4).
 
 **MVP1 is built — start here.** Steps 1–8c are done. What remains is the user's own setup and
