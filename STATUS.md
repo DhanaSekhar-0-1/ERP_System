@@ -45,9 +45,16 @@ the **Android APK**. State:
 - A first build (`744883b5-9713-48ec-bb67-f8f31438ab9c`, profile `pilot`) was queued on 2026-11-14 and
   left running. Its upload wrongly included the stale local `apps/mobile/android` folder (1.4 GB), so
   it may not reflect `app.json` (e.g. the location permission). Since then the root `.gitignore`
-  excludes that folder (`97212fd`). **Tomorrow: run a fresh build** in `apps/mobile`:
-  `npx eas-cli@latest build --platform android --profile pilot`, check its log shows a prebuild from
-  `app.json`, then download the APK and run docs/device-test-checklist.md.
+  excludes that folder (`97212fd`). Do not use this build.
+- **Fresh build done 2026-11-15:** `efd8117d-5099-4041-b25c-111368e98c91` (profile `pilot`, version
+  code 3, from `e04784f`). Upload was 2.2 MB, the log has a PREBUILD phase, and the installed app
+  requests NFC and location. Page:
+  https://expo.dev/accounts/dhana9572/projects/school-erp/builds/efd8117d-5099-4041-b25c-111368e98c91
+  (the APK link there expires 2026-11-29).
+- Installed over USB on the Realme 9 4G (RMX3521, Android 14) after removing an old debug build
+  from 2026-11-04. It opens to the sign-in screen and Server settings shows the Render address.
+  **Next: docs/device-test-checklist.md** — first add a class, a test teacher and two test students
+  to the demo school on the web (it only has the three admin logins so far).
 - Demo school logins (first passwords) are in git-ignored `pilot-first-logins.txt`.
 
 **Pilot hosting (set up 2026-11-14):** web https://school-erp-tan-zeta.vercel.app (Vercel project
