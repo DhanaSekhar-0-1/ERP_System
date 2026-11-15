@@ -53,6 +53,15 @@ the **Android APK**. State:
   (the APK link there expires 2026-11-29).
 - Installed over USB on the Realme 9 4G (RMX3521, Android 14) after removing an old debug build
   from 2026-11-04. It opens to the sign-in screen and Server settings shows the Render address.
+- **Current build on the phone: `a80b9712-8aff-4e20-8463-22df0a3e16a4`** (version code 4, from
+  `4ed73a0`), which adds a show/hide eye button to the password boxes; checked on the phone's
+  sign-in screen. Use this build for the device test.
+- 2026-11-15 web check on the **local** app with the dev test accounts (`test-org-school.txt`):
+  Teacher (attendance save, leave send and cancel), School Admin, Principal, Super Admin (all
+  pages open) and Student (sent to the phone app) all sign in. Seen and not yet fixed: the
+  dashboard counts all 97 students as "to mark" while the Attendance page counts only students in
+  a section; no "server is waking up" message on the phone; the sign-in error says "Invalid email
+  or password" although IDs are accepted too.
   **Next: docs/device-test-checklist.md** — first add a class, a test teacher and two test students
   to the demo school on the web (it only has the three admin logins so far).
 - Demo school logins (first passwords) are in git-ignored `pilot-first-logins.txt`.
