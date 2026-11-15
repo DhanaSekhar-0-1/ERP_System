@@ -3,10 +3,10 @@ import { colors, newPasswordProblem } from '@erp/shared';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { api } from '../src/api';
 import { useAuth } from '../src/auth';
-import { Button, errorText } from '../src/ui';
+import { Button, PasswordInput, errorText } from '../src/ui';
 
 /**
  * Shown instead of every other screen while the account is still on the first password the
@@ -57,29 +57,26 @@ export default function NewPassword() {
 
           <View style={styles.form}>
             <Text style={styles.label}>First password (from the school)</Text>
-            <TextInput
+            <PasswordInput
               value={current}
               onChangeText={setCurrent}
-              secureTextEntry
               autoComplete="password"
               accessibilityLabel="First password from the school"
               style={styles.input}
             />
             <Text style={styles.label}>New password</Text>
-            <TextInput
+            <PasswordInput
               value={next}
               onChangeText={setNext}
-              secureTextEntry
               autoComplete="password-new"
               accessibilityLabel="New password"
               style={styles.input}
             />
             <Text style={styles.hint}>At least 8 characters, with a letter and a number.</Text>
             <Text style={styles.label}>New password again</Text>
-            <TextInput
+            <PasswordInput
               value={confirm}
               onChangeText={setConfirm}
-              secureTextEntry
               autoComplete="password-new"
               accessibilityLabel="New password again"
               onSubmitEditing={() => void submit()}

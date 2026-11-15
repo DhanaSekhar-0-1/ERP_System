@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { colors, initials, longToday } from '@erp/shared';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { ReactNode, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from './auth';
 
@@ -83,6 +83,32 @@ export function Button({
   );
 }
 
+/** A password box with an eye button that shows or hides what was typed. Hidden to start with. */
+export function PasswordInput({ style, accessibilityLabel, ...props }: TextInputProps) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <View style={styles.passwordWrap}>
+      <TextInput
+        {...props}
+        accessibilityLabel={accessibilityLabel}
+        secureTextEntry={!visible}
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={[style, styles.passwordInput]}
+      />
+      <Pressable
+        onPress={() => setVisible(!visible)}
+        accessibilityRole="button"
+        accessibilityLabel={`${visible ? 'Hide' : 'Show'} ${accessibilityLabel ?? 'password'}`}
+        hitSlop={8}
+        style={styles.passwordEye}
+      >
+        <Ionicons name={visible ? 'eye-off-outline' : 'eye-outline'} size={22} color={colors.muted} />
+      </Pressable>
+    </View>
+  );
+}
+
 export const tabIcon =
   (name: keyof typeof Ionicons.glyphMap) =>
   ({ color, size }: { color: unknown; size: number }) => <Ionicons name={name} color={String(color)} size={size} />;
@@ -130,5 +156,8 @@ const styles = StyleSheet.create({
   },
   buttonText: { fontWeight: '700', fontSize: 14 },
   dimmed: { opacity: 0.6 },
+  passwordWrap: { position: 'relative' },
+  passwordInput: { paddingRight: 48 },
+  passwordEye: { position: 'absolute', right: 4, top: 0, width: 44, height: 46, alignItems: 'center', justifyContent: 'center' },
   empty: { textAlign: 'center', color: colors.muted, paddingVertical: 28, fontSize: 14 },
 });

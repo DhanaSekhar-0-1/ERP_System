@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { getServer, saveServer } from '../src/api';
 import { useAuth } from '../src/auth';
-import { Button, errorText } from '../src/ui';
+import { Button, PasswordInput, errorText } from '../src/ui';
 
 export default function Login() {
   const { user, signIn } = useAuth();
@@ -67,10 +67,9 @@ export default function Login() {
               style={styles.input}
             />
             <Text style={styles.label}>Password</Text>
-            <TextInput
+            <PasswordInput
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
               autoComplete="password"
               accessibilityLabel="Password"
               onSubmitEditing={() => void submit()}
