@@ -124,14 +124,25 @@ export class AccessService {
     if (!context.staffId) {
       return { classIds: [], sectionIds: [], subjectIds: [] };
     }
-    const assignments = await this.database.staffAssignment.findMany({
-      where: { schoolId: context.schoolId, staffId: context.staffId },
-      select: { classId: true, sectionId: true, subjectId: true },
-    });
+    // A class teacher covers the whole section even with no subject assigned there (a school
+    // on attendance and leave only may never assign subjects).
+    const [assignments, classTeacherOf] = await Promise.all([
+      this.database.staffAssignment.findMany({
+        where: { schoolId: context.schoolId, staffId: context.staffId },
+        select: { classId: true, sectionId: true, subjectId: true },
+      }),
+      this.database.classTeacher.findMany({
+        where: { schoolId: context.schoolId, staffId: context.staffId },
+        select: { sectionId: true },
+      }),
+    ]);
     return {
       classIds: [...new Set(assignments.filter((a) => !a.sectionId).map((a) => a.classId))],
       sectionIds: [
-        ...new Set(assignments.filter((a) => a.sectionId).map((a) => a.sectionId as string)),
+        ...new Set([
+          ...assignments.filter((a) => a.sectionId).map((a) => a.sectionId as string),
+          ...classTeacherOf.map((row) => row.sectionId),
+        ]),
       ],
       subjectIds: [...new Set(assignments.map((a) => a.subjectId))],
     };

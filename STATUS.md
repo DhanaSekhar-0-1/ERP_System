@@ -72,7 +72,14 @@ the **Android APK**. State:
   8-A (2 of 2 marked, 1 present); leave request sent ("Waiting") and cancelled; the app stayed
   signed in after being closed and reopened; Tap cards opens with "NFC is not available here"
   and the Card ID box selected (this phone has no NFC).
-  **Still to do from docs/device-test-checklist.md:** student login (`DEMO-001`), wrong-password
+- 2026-11-16 student checked on the phone (`DEMO-001`): home shows today "Present" and 100%,
+  tabs are Attendance and Leave only, a leave request was sent and shows "Pending".
+  **Bug found and fixed in code:** a class teacher with no subject in the section could not see
+  or decide their students' leave (coverage came from subject assignments only);
+  `AccessService.teacherCoverage` now also counts class-teacher sections. e2e 628/628.
+  **The pilot server needs a manual Render deploy of `feature/mvp1` to get this fix**; then
+  re-check that the pending `DEMO-001` request appears on the teacher's Leave page.
+  **Still to do from docs/device-test-checklist.md:** wrong-password
   message, check-in/out at school (needs the location set), NFC/OTG reader, Principal
   approve/reject on the web, airplane mode, mobile data, idle wake-up, large text.
 - Gap found: the web app has **no screen to register students** (the Students page only lists
