@@ -62,9 +62,17 @@ the **Android APK**. State:
   dashboard counts all 97 students as "to mark" while the Attendance page counts only students in
   a section; no "server is waking up" message on the phone; the sign-in error says "Invalid email
   or password" although IDs are accepted too.
-  **Next: docs/device-test-checklist.md** — first add a class, a test teacher and two test students
-  to the demo school on the web (it only has the three admin logins so far).
-- Demo school logins (first passwords) are in git-ignored `pilot-first-logins.txt`.
+- 2026-11-16 demo school set up for the device test: Class 8-A; teacher "Test Teacher" (`T26A01`,
+  class teacher of 8-A); students `DEMO-001` and `DEMO-002` imported with
+  `npm run import:students` from `backend/demo-students.csv`. "Aadhaar number required" was
+  switched off for the demo school to allow this; "Parent login" is on. Teacher check-in location
+  is still empty (set it in Settings at the school).
+  **Next: docs/device-test-checklist.md** on the phone with these accounts.
+- Gap found: the web app has **no screen to register students** (the Students page only lists
+  them), although docs/hosting-guide.md tells the School Admin to register them there. Today the
+  only way is the Excel/CSV import script. Decide before the pilot: build the form or change the guide.
+- Demo school logins (first passwords) are in git-ignored `pilot-first-logins.txt` (admins,
+  teacher) and `backend/demo-student-logins.csv` (students).
 
 **Pilot hosting (set up 2026-11-14):** web https://school-erp-tan-zeta.vercel.app (Vercel project
 `school-erp`, root `apps/web`, deploys from `main`); API https://school-erp-api-stf8.onrender.com

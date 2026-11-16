@@ -1,0 +1,3 @@
+Admission No,Admission Date,Admission Type,Class,Section,Roll Number,First Name,Family Name,Gender,Date of Birth,Parent Name,Parent Relation,Parent Mobile,Aadhaar or Enrolment No,NFC Card ID
+DEMO-001,16/11/2026,Existing,8,A,1,Test,StudentOne,M,22/03/2013,Demo ParentOne,Father,9000000002,,
+DEMO-002,16/11/2026,Existing,8,A,2,Test,StudentTwo,F,05/07/2013,Demo ParentTwo,Mother,9000000003,,
