@@ -67,7 +67,14 @@ the **Android APK**. State:
   `npm run import:students` from `backend/demo-students.csv`. "Aadhaar number required" was
   switched off for the demo school to allow this; "Parent login" is on. Teacher check-in location
   is still empty (set it in Settings at the school).
-  **Next: docs/device-test-checklist.md** on the phone with these accounts.
+- 2026-11-16 teacher checked on the phone over USB (build 4, pilot server): signed in as `T26A01`;
+  tabs are Attendance and Leave only; "school location is not set" message shown; Mark list saved
+  8-A (2 of 2 marked, 1 present); leave request sent ("Waiting") and cancelled; the app stayed
+  signed in after being closed and reopened; Tap cards opens with "NFC is not available here"
+  and the Card ID box selected (this phone has no NFC).
+  **Still to do from docs/device-test-checklist.md:** student login (`DEMO-001`), wrong-password
+  message, check-in/out at school (needs the location set), NFC/OTG reader, Principal
+  approve/reject on the web, airplane mode, mobile data, idle wake-up, large text.
 - Gap found: the web app has **no screen to register students** (the Students page only lists
   them), although docs/hosting-guide.md tells the School Admin to register them there. Today the
   only way is the Excel/CSV import script. Decide before the pilot: build the form or change the guide.
